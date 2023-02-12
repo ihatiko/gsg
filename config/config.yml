@@ -1,0 +1,17 @@
+configuration:
+  bulk: true
+#  databases:
+#      - name: test_database
+#        tables:
+#          - name: test
+#            rules: [ "$set = 10", "$unique", "$full-unique", "$positive" ]
+#            column:
+#              - name:
+#                rules: [
+#                  "$value < 10",
+#                  "$annotation=tableName.columnName",
+#                  "$dictionary=ИмяСправочника"
+#             ]
+
+
+# Вынести сюда все правила факера

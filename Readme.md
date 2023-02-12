@@ -14,7 +14,7 @@
 
 Карта поддерживаемых типов
 Name	Aliases	Description Supported
-1. [x] bigint	int8	signed eight-byte integer
+1. [-] bigint	int8	signed eight-byte integer
 2. [x] bigserial	serial8	autoincrementing eight-byte integer
 3. [x] bit [ (n) ]	 	fixed-length bit string
 4. [x] bit varying [ (n) ]	varbit [ (n) ]	variable-length bit string

@@ -2,8 +2,8 @@ package database_utils
 
 import (
 	"fmt"
-	"gena/generators"
 	"github.com/brianvoe/gofakeit/v6"
+	"gsg/generators"
 	"strings"
 )
 

@@ -1,4 +1,4 @@
-module gena
+module gsg
 
 go 1.19
 

@@ -2,29 +2,27 @@ package cmd
 
 import (
 	"fmt"
-	cfg "gena/config"
-	database_utils "gena/database-utils"
-	"gena/postgres"
 	"github.com/ihatiko/config"
 	"github.com/jackc/pgx"
 	"github.com/samber/lo"
+	cfg "gsg/config"
+	databaseUtils "gsg/database-utils"
+	"gsg/postgres"
 )
-
-var GlobalGenerationConfig *cfg.Configuration
 
 const (
 	configPath = "./config/config"
 )
 
+var Settings *cfg.Settings
+
 func Run() {
-	globalGenerationConfig, err := config.GetConfig[cfg.Configuration](configPath)
+	cfg, err := config.GetConfig[cfg.Config](configPath)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(globalGenerationConfig.Bulk)
-	databases := []string{"test_database"}
+	Settings = cfg.Settings
 	pgCfg := &postgres.Config{
-		CreateDb: false,
 		Host:     "localhost",
 		Password: "postgres",
 		PgDriver: "pgx",
@@ -33,26 +31,26 @@ func Run() {
 		SSLMode:  "disable",
 		Schema:   "public",
 	}
-	err = health(databases, pgCfg)
+	err = health(pgCfg)
 	if err != nil {
 		panic(err)
 	}
-	err = scanDatabase(databases, pgCfg)
+	err = scanDatabase(pgCfg)
 	if err != nil {
 		panic(err)
 	}
 }
 
-func scanDatabase(databases []string, cfg *postgres.Config) error {
+func scanDatabase(postgresConfig *postgres.Config) error {
 	var err error
-	for _, database := range databases {
-		cfg.Dbname = database
-		db, err := (cfg).NewConnection()
+	for _, database := range Settings.Databases {
+		postgresConfig.Dbname = database.Name
+		db, err := (postgresConfig).NewConnection()
 
 		if err != nil {
-			return fmt.Errorf("database error %s %v", cfg.Dbname, err)
+			return fmt.Errorf("database error %s %v", postgresConfig.Dbname, err)
 		}
-		var Schemas []*database_utils.Schema
+		var Schemas []*databaseUtils.Schema
 		err = db.Select(&Schemas, `select
     		table_catalog,
      		table_name,
@@ -64,15 +62,17 @@ func scanDatabase(databases []string, cfg *postgres.Config) error {
  		from INFORMATION_SCHEMA.COLUMNS where table_schema = 'public'`)
 
 		if err != nil {
-			return fmt.Errorf("database error %s %v", cfg.Dbname, err)
+			return fmt.Errorf("database error %s %v", postgresConfig.Dbname, err)
 		}
-		tableGroup := lo.GroupBy[*database_utils.Schema, string](Schemas, func(item *database_utils.Schema) string {
+		tableGroup := lo.GroupBy[*databaseUtils.Schema, string](Schemas, func(item *databaseUtils.Schema) string {
 			return item.TableName
 		})
 		for k, v := range tableGroup {
-			columns, values := getColumnData(v)
-			rows := [][]any{values}
-			bulkData := pgx.CopyFromRows(rows)
+			metaTable, _ := lo.Find[*cfg.Table](database.Tables, func(item *cfg.Table) bool {
+				return item.Name == k
+			})
+			columns, values := getColumnData(metaTable, v)
+			bulkData := pgx.CopyFromRows(values)
 			_, err := postgres.Connection.CopyFrom([]string{k}, columns, bulkData)
 			if err != nil {
 				panic(err)
@@ -82,20 +82,36 @@ func scanDatabase(databases []string, cfg *postgres.Config) error {
 	return err
 }
 
-func getColumnData(schemas []*database_utils.Schema) ([]string, []any) {
+func getColumnData(table *cfg.Table, schemas []*databaseUtils.Schema) ([]string, [][]any) {
 	var columns []string
-	var values []any
+
+	var result [][]any
 	for _, column := range schemas {
 		columns = append(columns, column.ColumnName)
-		values = append(values, database_utils.GetValue(column))
 	}
-	return columns, values
+	if table == nil {
+		result = Generate(Settings.DefaultSet, schemas, result)
+	} else {
+		result = Generate(table.Set, schemas, result)
+	}
+	return columns, result
 }
 
-func health(databases []string, cfg *postgres.Config) error {
+func Generate(count int, schemas []*databaseUtils.Schema, result [][]any) [][]any {
+	for i := 0; i < count; i++ {
+		var values []any
+		for _, column := range schemas {
+			values = append(values, databaseUtils.GetValue(column))
+		}
+		result = append(result, values)
+	}
+	return result
+}
+
+func health(cfg *postgres.Config) error {
 	var err error
-	for _, database := range databases {
-		cfg.Dbname = database
+	for _, database := range Settings.Databases {
+		cfg.Dbname = database.Name
 		conn, err := (cfg).NewConnection()
 		if err != nil {
 			err = fmt.Errorf("database error %s %v", cfg.Dbname, err)

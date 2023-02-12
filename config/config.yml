@@ -1,10 +1,18 @@
-configuration:
+settings:
   bulk: true
+  defaultSet: 30
+  databases:
+    - name: test_database
+      tables:
+        - name: test
+          set: 10000000
+
+
 #  databases:
 #      - name: test_database
 #        tables:
 #          - name: test
-#            rules: [ "$set = 10", "$unique", "$full-unique", "$positive" ]
+#            rules: [ "$unique", "$full-unique", "$positive" ]
 #            column:
 #              - name:
 #                rules: [

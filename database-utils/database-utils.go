@@ -20,9 +20,21 @@ type Schema struct {
 func GetValue(columnData *Schema) any {
 	var result any
 	switch columnData.DataType {
+	case "date":
+		return generators.DateGenerator()
+	case "timestamp without time zone":
+		return generators.TimeStampGenerator()
+	case "boolean":
+		return generators.BoolGenerator()
+	case "numeric":
+		return generators.NumericGenerator()
+	case "uuid":
+		return generators.UUIDGenerator()
+	case "bit":
+		return generators.BitGenerator()
 	case "integer":
 		if columnData.ColumnDefault != nil && strings.Contains(*columnData.ColumnDefault, "nextval") {
-			result = generators.Sequence(fmt.Sprintf("%s_%s_%s",
+			result = generators.Serial(fmt.Sprintf("%s_%s_%s",
 				columnData.Database,
 				columnData.TableName,
 				columnData.ColumnName,
@@ -35,6 +47,7 @@ func GetValue(columnData *Schema) any {
 				parsedLength, _ := strconv.Atoi(*data)*/
 		result = generators.RandStringRunes(10)
 	default:
+		panic(fmt.Sprintf("unknown type %s", columnData.DataType))
 		return "unknown type"
 	}
 

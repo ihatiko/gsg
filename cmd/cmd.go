@@ -71,11 +71,13 @@ func scanDatabase(postgresConfig *postgres.Config) error {
 			metaTable, _ := lo.Find[*cfg.Table](database.Tables, func(item *cfg.Table) bool {
 				return item.Name == k
 			})
-			columns, values := getColumnData(metaTable, v)
-			bulkData := pgx.CopyFromRows(values)
-			_, err := postgres.Connection.CopyFrom([]string{k}, columns, bulkData)
-			if err != nil {
-				panic(err)
+			for i := 0; i < metaTable.Set/Settings.MaxBatch; i++ {
+				columns, values := getColumnData(metaTable, v)
+				bulkData := pgx.CopyFromRows(values)
+				_, err := postgres.Connection.CopyFrom([]string{k}, columns, bulkData)
+				if err != nil {
+					panic(err)
+				}
 			}
 		}
 	}
@@ -89,15 +91,11 @@ func getColumnData(table *cfg.Table, schemas []*databaseUtils.Schema) ([]string,
 	for _, column := range schemas {
 		columns = append(columns, column.ColumnName)
 	}
-	if table == nil {
-		result = Generate(Settings.DefaultSet, schemas, result)
-	} else {
-		result = Generate(table.Set, schemas, result)
-	}
+	result = Generate(table, Settings.MaxBatch, schemas, result)
 	return columns, result
 }
 
-func Generate(count int, schemas []*databaseUtils.Schema, result [][]any) [][]any {
+func Generate(table *cfg.Table, count int, schemas []*databaseUtils.Schema, result [][]any) [][]any {
 	for i := 0; i < count; i++ {
 		var values []any
 		for _, column := range schemas {

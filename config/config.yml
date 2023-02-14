@@ -1,11 +1,13 @@
 settings:
   bulk: true
   defaultSet: 30
+  maxBatch: 1000
   databases:
     - name: test_database
       tables:
         - name: test
-          set: 10000000
+          set: 10000
+          #typeSettings: ["character varying length = 10"]
 
 
 #  databases:

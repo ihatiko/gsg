@@ -2,7 +2,7 @@ package generators
 
 var sequenceMap = map[string]int{}
 
-func Sequence(key string) any {
+func Serial(key string) any {
 	data, ok := sequenceMap[key]
 	if ok {
 		data++

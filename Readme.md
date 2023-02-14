@@ -12,6 +12,20 @@
 10) Прекомпиляция и валидация правил на справочники
 
 
+
+create table test (
+id serial
+);
+
+1. alter table test add column case0 **serial**;
+2. alter table test add column case1 **uuid**;
+3. alter table test add column case2 **bit**;
+4. alter table test add column case3 **bool**;
+5. alter table test add column case4 **date**;
+6. alter table test add column case5 **timestamp**;
+7. alter table test add column case6 **numeric**;
+8. alter table test add column case7 **varchar(256)**;
+
 Карта поддерживаемых типов
 Name	Aliases	Description Supported
 1. [ ] bigint	int8	signed eight-byte integer
@@ -39,7 +53,7 @@ Name	Aliases	Description Supported
 23. [ ] money	 	currency amount
 24. [ ] numeric [ (p, s) ]	decimal [ (p, s) ]	exact numeric of selectable precision
 25. [ ] path	 	geometric path on a plane
-26. [ ] pg_lsn	 	PostgreSQL Log Sequence Number
+26. [ ] pg_lsn	 	PostgreSQL Log Serial Number
 27. [ ] pg_snapshot	 	user-level transaction ID snapshot
 28. [ ] point	 	geometric point on a plane
 29. [ ] polygon	 	closed geometric path on a plane

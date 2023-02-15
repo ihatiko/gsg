@@ -51,15 +51,7 @@ func scanDatabase(postgresConfig *postgres.Config) error {
 			return fmt.Errorf("database error %s %v", postgresConfig.Dbname, err)
 		}
 		var Schemas []*databaseUtils.Schema
-		err = db.Select(&Schemas, `select
-    		table_catalog,
-     		table_name,
-     		column_name,
-     		column_default,
-     		data_type,
-     		is_nullable,
-     		character_maximum_length
- 		from INFORMATION_SCHEMA.COLUMNS where table_schema = 'public'`)
+		err = db.Select(&Schemas, getDatabaseInfo)
 
 		if err != nil {
 			return fmt.Errorf("database error %s %v", postgresConfig.Dbname, err)
@@ -84,6 +76,42 @@ func scanDatabase(postgresConfig *postgres.Config) error {
 	return err
 }
 
+type Relation struct {
+	GeneratedData map[string][]any
+	Schema        *databaseUtils.Schema
+}
+
+type RelationSchemaLink struct {
+	Schema *databaseUtils.Schema
+}
+type RelationGraph struct {
+	AllRelations        map[string]Relation
+	RelationSchemaLinks []*RelationSchemaLink
+}
+
+func BuildRelations(data []*databaseUtils.Schema) *RelationGraph {
+	graph := RelationGraph{AllRelations: map[string]Relation{}}
+	for _, d := range data {
+		schemaLink := &RelationSchemaLink{}
+		schemaLink.Schema = d
+		if d.DependencyTableName != nil {
+			dependencySchema, _ := lo.Find[*databaseUtils.Schema](data, func(item *databaseUtils.Schema) bool {
+				return item.TableName == *d.DependencyTableName && item.TableName == *d.DependencyColumnName
+			})
+			currentRelation, _ := lo.Find[*databaseUtils.Schema](graph.RelationSchemaLinks, func(item *databaseUtils.Schema) bool {
+				return item.TableName == *d.DependencyTableName && item.TableName == *d.DependencyColumnName
+			})
+			rel := Relation{Schema: dependencySchema}
+			graph.AllRelations[d.GetKey()] = rel
+			schemaLink.Schema = dependencySchema
+		}
+		graph.RelationSchemaLinks = append(graph.RelationSchemaLinks, schemaLink)
+		graph.RelationSchemaLinks = append(graph.RelationSchemaLinks)
+	}
+	return &graph
+}
+
+// TODO pk shuffle
 func getColumnData(table *cfg.Table, schemas []*databaseUtils.Schema) ([]string, [][]any) {
 	var columns []string
 

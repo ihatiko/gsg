@@ -3,7 +3,6 @@ package config
 type Settings struct {
 	Bulk       bool
 	DefaultSet int
-	MaxBatch   int
 	Databases  []*Database
 }
 

@@ -3,7 +3,7 @@ package cmd
 // language=sql
 const (
 	getDatabaseInfo = `
-with dependencies as (SELECT tc.table_name   as in_table,
+with dependencies as (SELECT distinct tc.table_name   as in_table,
                              kcu.column_name as column_in,
                              ccu.table_name  AS out_table,
                              ccu.column_name AS column_name_out

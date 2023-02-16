@@ -1,6 +1,9 @@
 package generators
 
-import "math/rand"
+import (
+	"math/rand"
+	"strings"
+)
 
 var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
@@ -9,5 +12,5 @@ func RandStringRunes(n int) string {
 	for i := range b {
 		b[i] = letterRunes[rand.Intn(len(letterRunes))]
 	}
-	return string(b)
+	return strings.ToValidUTF8(string(b), "")
 }

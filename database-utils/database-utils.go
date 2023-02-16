@@ -3,6 +3,7 @@ package database_utils
 import (
 	"fmt"
 	"github.com/brianvoe/gofakeit/v6"
+	cfg "gsg/config"
 	"gsg/generators"
 	"strings"
 )
@@ -20,9 +21,9 @@ type Schema struct {
 }
 
 func (d *Schema) GetKey() string {
-	return fmt.Sprintf("%s.%s.%s", d.Database, d.DependencyTableName, d.DependencyColumnName)
+	return fmt.Sprintf("%s.%s.%s", d.Database, *d.DependencyTableName, *d.DependencyColumnName)
 }
-func GetValue(columnData *Schema) any {
+func GetValue(columnData *Schema, table *cfg.Table) any {
 	var result any
 	switch columnData.DataType {
 	case "date":
@@ -48,8 +49,6 @@ func GetValue(columnData *Schema) any {
 		}
 		result = gofakeit.IntRange(0, +2147483647)
 	case "character varying":
-		/*		data := columnData.Length
-				parsedLength, _ := strconv.Atoi(*data)*/
 		result = generators.RandStringRunes(10)
 	default:
 		panic(fmt.Sprintf("unknown type %s", columnData.DataType))

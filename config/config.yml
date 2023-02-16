@@ -1,12 +1,11 @@
 settings:
   bulk: true
-  defaultSet: 30
-  maxBatch: 1000
+  defaultSet: 300000
   databases:
-    - name: test_database
+    - name: postgres
       tables:
-        - name: test
-          set: 10000
+        - name: test0
+          set: 100000
           #typeSettings: ["character varying length = 10"]
 
 

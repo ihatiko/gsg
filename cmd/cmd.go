@@ -56,82 +56,129 @@ func scanDatabase(postgresConfig *postgres.Config) error {
 		if err != nil {
 			return fmt.Errorf("database error %s %v", postgresConfig.Dbname, err)
 		}
-		tableGroup := lo.GroupBy[*databaseUtils.Schema, string](Schemas, func(item *databaseUtils.Schema) string {
-			return item.TableName
-		})
-		for k, v := range tableGroup {
-			metaTable, _ := lo.Find[*cfg.Table](database.Tables, func(item *cfg.Table) bool {
-				return item.Name == k
-			})
-			for i := 0; i < metaTable.Set/Settings.MaxBatch; i++ {
-				columns, values := getColumnData(metaTable, v)
-				bulkData := pgx.CopyFromRows(values)
-				_, err := postgres.Connection.CopyFrom([]string{k}, columns, bulkData)
-				if err != nil {
-					panic(err)
-				}
-			}
+		relations := ToRelations(Schemas)
+		for k, v := range relations {
+			InsertData(k, v, relations, database)
 		}
 	}
 	return err
 }
 
-type Relation struct {
-	GeneratedData map[string][]any
+func InsertData(tableName string, v *Table, relations map[string]*Table, database *cfg.Database) {
+	if v.Inserted {
+		return
+	}
+	for _, column := range v.Columns {
+		if column.Schema.DependencyColumnName != nil {
+			table := relations[*column.Schema.DependencyTableName]
+			InsertData(*column.Schema.DependencyTableName, table, relations, database)
+		}
+	}
+	metaTable, _ := lo.Find[*cfg.Table](database.Tables, func(item *cfg.Table) bool {
+		return item.Name == tableName
+	})
+
+	columns, values := getColumnData(metaTable, v.Columns, relations)
+	for i := 0; i < 10; i++ {
+		bulkData := pgx.CopyFromRows(values)
+		_, err := postgres.Connection.CopyFrom([]string{tableName}, columns, bulkData)
+		fmt.Println(fmt.Sprintf("Inserted in database %s table %s data: %d", database.Name, tableName, len(values)))
+		if err == nil {
+			break
+		}
+		if i == 10 {
+			panic(err)
+		}
+	}
+	v.Inserted = true
+}
+
+type Table struct {
+	Inserted bool
+	Columns  map[string]*Column
+}
+
+type Column struct {
+	GeneratedData []any
 	Schema        *databaseUtils.Schema
 }
 
-type RelationSchemaLink struct {
-	Schema *databaseUtils.Schema
-}
-type RelationGraph struct {
-	AllRelations        map[string]Relation
-	RelationSchemaLinks []*RelationSchemaLink
-}
-
-func BuildRelations(data []*databaseUtils.Schema) *RelationGraph {
-	graph := RelationGraph{AllRelations: map[string]Relation{}}
-	for _, d := range data {
-		schemaLink := &RelationSchemaLink{}
-		schemaLink.Schema = d
-		if d.DependencyTableName != nil {
-			dependencySchema, _ := lo.Find[*databaseUtils.Schema](data, func(item *databaseUtils.Schema) bool {
-				return item.TableName == *d.DependencyTableName && item.TableName == *d.DependencyColumnName
-			})
-			currentRelation, _ := lo.Find[*databaseUtils.Schema](graph.RelationSchemaLinks, func(item *databaseUtils.Schema) bool {
-				return item.TableName == *d.DependencyTableName && item.TableName == *d.DependencyColumnName
-			})
-			rel := Relation{Schema: dependencySchema}
-			graph.AllRelations[d.GetKey()] = rel
-			schemaLink.Schema = dependencySchema
+func ToRelations(schemas []*databaseUtils.Schema) map[string]*Table {
+	result := map[string]*Table{}
+	tableGroup := lo.GroupBy[*databaseUtils.Schema, string](schemas, func(item *databaseUtils.Schema) string {
+		return item.TableName
+	})
+	for key, tables := range tableGroup {
+		columns := lo.Map[*databaseUtils.Schema, *Column](tables, func(item *databaseUtils.Schema, index int) *Column {
+			return &Column{Schema: item, GeneratedData: nil}
+		})
+		formattedColumns := map[string]*Column{}
+		for _, data := range columns {
+			formattedColumns[data.Schema.ColumnName] = data
 		}
-		graph.RelationSchemaLinks = append(graph.RelationSchemaLinks, schemaLink)
-		graph.RelationSchemaLinks = append(graph.RelationSchemaLinks)
+		result[key] = &Table{
+			Columns:  formattedColumns,
+			Inserted: false,
+		}
 	}
-	return &graph
+	return result
 }
 
 // TODO pk shuffle
-func getColumnData(table *cfg.Table, schemas []*databaseUtils.Schema) ([]string, [][]any) {
+func getColumnData(table *cfg.Table, schemas map[string]*Column, relations map[string]*Table) ([]string, [][]any) {
 	var columns []string
 
-	var result [][]any
 	for _, column := range schemas {
-		columns = append(columns, column.ColumnName)
+		columns = append(columns, column.Schema.ColumnName)
 	}
-	result = Generate(table, Settings.MaxBatch, schemas, result)
-	return columns, result
+	count := 0
+	if table != nil && table.Set != 0 {
+		count = table.Set
+	}
+	if count == 0 {
+		count = Settings.DefaultSet
+	}
+	return columns, Generate(table, count, schemas, relations)
 }
 
-func Generate(table *cfg.Table, count int, schemas []*databaseUtils.Schema, result [][]any) [][]any {
-	for i := 0; i < count; i++ {
-		var values []any
-		for _, column := range schemas {
-			values = append(values, databaseUtils.GetValue(column))
+func Generate(table *cfg.Table, count int, columns map[string]*Column, relations map[string]*Table) [][]any {
+	var values [][]any
+	for _, column := range columns {
+		if column.Schema.DependencyColumnName != nil {
+			dependencyTable := relations[*column.Schema.DependencyTableName]
+			dependencyColumn := dependencyTable.Columns[*column.Schema.DependencyColumnName]
+			shuffledData := dependencyColumn.GeneratedData
+			for {
+				if count <= len(shuffledData) {
+					break
+				}
+				shuffledData = append(shuffledData, dependencyColumn.GeneratedData...)
+			}
+			shuffledData = lo.Shuffle(shuffledData)
+			shuffledSet := shuffledData[:count]
+			for i := 0; i < len(shuffledSet); i++ {
+				if len(values) <= i {
+					values = append(values, []any{shuffledSet[i]})
+				} else {
+					values[i] = append(values[i], shuffledSet[i])
+				}
+			}
+			column.GeneratedData = append(column.GeneratedData, shuffledSet...)
+			continue
 		}
-		result = append(result, values)
+		var columnSet []any
+		for i := 0; i < count; i++ {
+			val := databaseUtils.GetValue(column.Schema, table)
+			columnSet = append(columnSet, val)
+			if len(values) <= i {
+				values = append(values, []any{val})
+			} else {
+				values[i] = append(values[i], val)
+			}
+		}
+		column.GeneratedData = append(column.GeneratedData, columnSet...)
 	}
-	return result
+	return values
 }
 
 func health(cfg *postgres.Config) error {

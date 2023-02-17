@@ -80,7 +80,7 @@ func (g *Generator) generate(table *cfg.Table, count int, columns map[string]*Co
 		}
 		var columnSet []any
 		for i := 0; i < count; i++ {
-			val, _ := g.GetValue(column.Schema, table)
+			val, _ := g.GetValue(column, table)
 			columnSet = append(columnSet, val)
 			if len(dataset.Data) <= i {
 				dataset.Data = append(dataset.Data, []any{val})
@@ -124,11 +124,12 @@ func (g *Generator) GetCustomDatabaseType(columnData *Schema, table *cfg.Table) 
 	return nil, errors.New(fmt.Sprintf("unknown type %s in table %s in database %s", columnData.DataType, columnData.TableName, columnData.Database))
 }
 
-func (g *Generator) GetValue(columnData *Schema, table *cfg.Table) (any, error) {
+func (g *Generator) GetValue(columnData *Column, table *cfg.Table) (any, error) {
 	var result any
-	switch columnData.DataType {
+	_, ok := columnData.Constraints["UNIQUE"]
+	switch columnData.Schema.DataType {
 	case "USER-DEFINED":
-		return g.GetCustomDatabaseType(columnData, table)
+		return g.GetCustomDatabaseType(columnData.Schema, table)
 	case "date":
 		result = postgres_types_generators.DateGenerator()
 	case "timestamp with time zone":
@@ -140,17 +141,17 @@ func (g *Generator) GetValue(columnData *Schema, table *cfg.Table) (any, error) 
 	case "numeric":
 		result = postgres_types_generators.NumericGenerator()
 	case "uuid":
-		result = postgres_types_generators.UUIDGenerator()
+		result = postgres_types_generators.UUIDGenerator(ok)
 	case "bit":
 		result = postgres_types_generators.BitGenerator()
 	case "jsonb":
 		result = postgres_types_generators.JsonBGenerator()
 	case "integer":
-		if columnData.ColumnDefault != nil && strings.Contains(*columnData.ColumnDefault, "nextval") {
+		if columnData.Schema.ColumnDefault != nil && strings.Contains(*columnData.Schema.ColumnDefault, "nextval") {
 			result = postgres_types_generators.Serial(fmt.Sprintf("%s_%s_%s",
-				columnData.Database,
-				columnData.TableName,
-				columnData.ColumnName,
+				columnData.Schema.Database,
+				columnData.Schema.TableName,
+				columnData.Schema.ColumnName,
 			))
 			break
 		}
@@ -164,9 +165,13 @@ func (g *Generator) GetValue(columnData *Schema, table *cfg.Table) (any, error) 
 	case "character varying":
 		result = postgres_types_generators.RandStringRunes(10)
 	default:
-		return nil, errors.New(fmt.Sprintf("unknown type %s in table %s in database %s", columnData.DataType, columnData.TableName, columnData.Database))
+		return nil, errors.New(fmt.Sprintf("unknown type %s in table %s in database %s",
+			columnData.Schema.DataType,
+			columnData.Schema.TableName,
+			columnData.Schema.Database,
+		))
 	}
-	if columnData.IsNullable {
+	if columnData.Schema.IsNullable {
 		if gofakeit.IntRange(0, 1) == 0 {
 			return nil, nil
 		}

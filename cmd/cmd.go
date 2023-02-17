@@ -68,10 +68,10 @@ func scanDatabase(postgresConfig *postgres.Config) error {
 	return err
 }
 
-func ValidateSupportedTypes(Schemas []*generator.Schema, generator *generator.Generator) bool {
+func ValidateSupportedTypes(Schemas []*generator.Schema, g *generator.Generator) bool {
 	state := false
 	for _, v := range Schemas {
-		_, err := generator.GetValue(v, nil)
+		_, err := g.GetValue(&generator.Column{Schema: v, GeneratedData: nil}, nil)
 		if err != nil {
 			fmt.Println(err)
 			state = true

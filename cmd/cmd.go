@@ -6,7 +6,7 @@ import (
 	"github.com/jackc/pgx"
 	"github.com/samber/lo"
 	cfg "gsg/config"
-	databaseUtils "gsg/database-utils"
+	"gsg/generator"
 	"gsg/postgres"
 )
 
@@ -50,135 +50,108 @@ func scanDatabase(postgresConfig *postgres.Config) error {
 		if err != nil {
 			return fmt.Errorf("database error %s %v", postgresConfig.Dbname, err)
 		}
-		var Schemas []*databaseUtils.Schema
+		var Schemas []*generator.Schema
 		err = db.Select(&Schemas, getDatabaseInfo)
-
 		if err != nil {
 			return fmt.Errorf("database error %s %v", postgresConfig.Dbname, err)
 		}
+		generator := generator.NewGenerator(db, Settings)
+		if ValidateSupportedTypes(Schemas, generator) {
+			return nil
+		}
+
 		relations := ToRelations(Schemas)
 		for k, v := range relations {
-			InsertData(k, v, relations, database)
+			InsertData(k, v, relations, database, generator)
 		}
 	}
 	return err
 }
 
-func InsertData(tableName string, v *Table, relations map[string]*Table, database *cfg.Database) {
+func ValidateSupportedTypes(Schemas []*generator.Schema, generator *generator.Generator) bool {
+	state := false
+	for _, v := range Schemas {
+		_, err := generator.GetValue(v, nil)
+		if err != nil {
+			fmt.Println(err)
+			state = true
+		}
+	}
+	return state
+}
+
+func InsertData(tableName string, v *generator.Table, relations map[string]*generator.Table, database *cfg.Database, gen *generator.Generator) {
 	if v.Inserted {
 		return
 	}
-	for _, column := range v.Columns {
-		if column.Schema.DependencyColumnName != nil {
-			table := relations[*column.Schema.DependencyTableName]
-			InsertData(*column.Schema.DependencyTableName, table, relations, database)
+	columns := lo.Values(v.Columns)
+	dependencyConstraints := lo.Reduce[*generator.Column, []generator.Constraint](columns, func(agg []generator.Constraint, item *generator.Column, index int) []generator.Constraint {
+		for k, constraint := range item.Constraints {
+			if k == "FOREIGN KEY" && tableName != constraint.DependencyTableName {
+				agg = append(agg, constraint)
+			}
+		}
+		return agg
+	}, []generator.Constraint{})
+
+	for _, dependencyTable := range dependencyConstraints {
+		dpd := relations[dependencyTable.DependencyTableName]
+		if !dpd.Inserted {
+			fmt.Println(fmt.Sprintf("Redirect create %s -> %s", tableName, dependencyTable.DependencyTableName))
+			InsertData(dependencyTable.DependencyTableName, relations[dependencyTable.DependencyTableName], relations, database, gen)
 		}
 	}
+
 	metaTable, _ := lo.Find[*cfg.Table](database.Tables, func(item *cfg.Table) bool {
 		return item.Name == tableName
 	})
-
-	columns, values := getColumnData(metaTable, v.Columns, relations)
-	for i := 0; i < 10; i++ {
-		bulkData := pgx.CopyFromRows(values)
-		_, err := postgres.Connection.CopyFrom([]string{tableName}, columns, bulkData)
-		fmt.Println(fmt.Sprintf("Inserted in database %s table %s data: %d", database.Name, tableName, len(values)))
-		if err == nil {
-			break
-		}
-		if i == 10 {
-			panic(err)
-		}
+	_, err := postgres.Connection.Exec(fmt.Sprintf("truncate %s cascade", tableName))
+	if err != nil {
+		panic(err)
 	}
+	dataSet := gen.GetColumnData(metaTable, v.Columns, relations)
+	bulkData := pgx.CopyFromRows(dataSet.Data)
+	_, err = postgres.Connection.CopyFrom([]string{tableName}, dataSet.Columns, bulkData)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(fmt.Sprintf("Inserted in database %s table %s", database.Name, tableName))
 	v.Inserted = true
 }
 
-type Table struct {
-	Inserted bool
-	Columns  map[string]*Column
-}
-
-type Column struct {
-	GeneratedData []any
-	Schema        *databaseUtils.Schema
-}
-
-func ToRelations(schemas []*databaseUtils.Schema) map[string]*Table {
-	result := map[string]*Table{}
-	tableGroup := lo.GroupBy[*databaseUtils.Schema, string](schemas, func(item *databaseUtils.Schema) string {
+func ToRelations(schemas []*generator.Schema) map[string]*generator.Table {
+	result := map[string]*generator.Table{}
+	tableGroup := lo.GroupBy[*generator.Schema, string](schemas, func(item *generator.Schema) string {
 		return item.TableName
 	})
 	for key, tables := range tableGroup {
-		columns := lo.Map[*databaseUtils.Schema, *Column](tables, func(item *databaseUtils.Schema, index int) *Column {
-			return &Column{Schema: item, GeneratedData: nil}
+		columns := lo.Map[*generator.Schema, *generator.Column](tables, func(item *generator.Schema, index int) *generator.Column {
+			return &generator.Column{Schema: item, GeneratedData: nil}
 		})
-		formattedColumns := map[string]*Column{}
-		for _, data := range columns {
-			formattedColumns[data.Schema.ColumnName] = data
+		formattedColumns := map[string]*generator.Column{}
+		wrappedColumns := lo.GroupBy[*generator.Column, string](columns, func(item *generator.Column) string {
+			return item.Schema.ColumnName
+		})
+		for _, data := range wrappedColumns {
+			wrappedColumn := data[0]
+			wrappedColumn.Constraints = map[string]generator.Constraint{}
+			for _, constraints := range data {
+				if constraints.Schema.ConstraintType != nil {
+					wrappedColumn.Constraints[*constraints.Schema.ConstraintType] = generator.Constraint{
+						DependencyColumnName: *constraints.Schema.DependencyColumnName,
+						DependencyTableName:  *constraints.Schema.DependencyTableName,
+					}
+				}
+			}
+			formattedColumns[wrappedColumn.Schema.ColumnName] = wrappedColumn
 		}
-		result[key] = &Table{
+
+		result[key] = &generator.Table{
 			Columns:  formattedColumns,
 			Inserted: false,
 		}
 	}
 	return result
-}
-
-// TODO pk shuffle
-func getColumnData(table *cfg.Table, schemas map[string]*Column, relations map[string]*Table) ([]string, [][]any) {
-	var columns []string
-
-	for _, column := range schemas {
-		columns = append(columns, column.Schema.ColumnName)
-	}
-	count := 0
-	if table != nil && table.Set != 0 {
-		count = table.Set
-	}
-	if count == 0 {
-		count = Settings.DefaultSet
-	}
-	return columns, Generate(table, count, schemas, relations)
-}
-
-func Generate(table *cfg.Table, count int, columns map[string]*Column, relations map[string]*Table) [][]any {
-	var values [][]any
-	for _, column := range columns {
-		if column.Schema.DependencyColumnName != nil {
-			dependencyTable := relations[*column.Schema.DependencyTableName]
-			dependencyColumn := dependencyTable.Columns[*column.Schema.DependencyColumnName]
-			shuffledData := dependencyColumn.GeneratedData
-			for {
-				if count <= len(shuffledData) {
-					break
-				}
-				shuffledData = append(shuffledData, dependencyColumn.GeneratedData...)
-			}
-			shuffledData = lo.Shuffle(shuffledData)
-			shuffledSet := shuffledData[:count]
-			for i := 0; i < len(shuffledSet); i++ {
-				if len(values) <= i {
-					values = append(values, []any{shuffledSet[i]})
-				} else {
-					values[i] = append(values[i], shuffledSet[i])
-				}
-			}
-			column.GeneratedData = append(column.GeneratedData, shuffledSet...)
-			continue
-		}
-		var columnSet []any
-		for i := 0; i < count; i++ {
-			val := databaseUtils.GetValue(column.Schema, table)
-			columnSet = append(columnSet, val)
-			if len(values) <= i {
-				values = append(values, []any{val})
-			} else {
-				values[i] = append(values[i], val)
-			}
-		}
-		column.GeneratedData = append(column.GeneratedData, columnSet...)
-	}
-	return values
 }
 
 func health(cfg *postgres.Config) error {

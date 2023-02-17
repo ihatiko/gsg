@@ -1,4 +1,4 @@
-package generators
+package postgres_types_generators
 
 import uuid "github.com/satori/go.uuid"
 

@@ -1,4 +1,4 @@
-package generators
+package postgres_types_generators
 
 import (
 	"github.com/jackc/pgx/pgtype"

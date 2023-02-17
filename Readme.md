@@ -12,7 +12,8 @@
 10) Работа со справочниками
 11) Прекомпиляция и валидация правил на справочники
 12) Исправить конфликты при генерации уникальных значений
-
+13) Преобразователь типов между базами
+14) Добавить правило срабатывание null в проценте
 
 create table test (
 id serial
@@ -26,6 +27,8 @@ id serial
 6. alter table test add column case5 **timestamp**;
 7. alter table test add column case6 **numeric**;
 8. alter table test add column case7 **varchar(256)**;
+9. alter table test add column case7 **jsonb**;
+10. alter table test add column case7 **text**;
 
 Карта поддерживаемых типов
 Name	Aliases	Description Supported

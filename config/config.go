@@ -1,7 +1,6 @@
 package config
 
 type Settings struct {
-	Bulk       bool
 	DefaultSet int
 	Databases  []*Database
 }

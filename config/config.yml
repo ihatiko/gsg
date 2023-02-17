@@ -1,14 +1,10 @@
 settings:
-  bulk: true
-  defaultSet: 300000
+  defaultSet: 1000000
   databases:
     - name: postgres
-      tables:
-        - name: test0
-          set: 100000
           #typeSettings: ["character varying length = 10"]
 
-
+# billing
 #  databases:
 #      - name: test_database
 #        tables:

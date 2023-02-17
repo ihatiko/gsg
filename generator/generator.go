@@ -126,7 +126,7 @@ func (g *Generator) GetCustomDatabaseType(columnData *Schema, table *cfg.Table) 
 
 func (g *Generator) GetValue(columnData *Column, table *cfg.Table) (any, error) {
 	var result any
-	_, ok := columnData.Constraints["UNIQUE"]
+	_, unique := columnData.Constraints["UNIQUE"]
 	switch columnData.Schema.DataType {
 	case "USER-DEFINED":
 		return g.GetCustomDatabaseType(columnData.Schema, table)
@@ -141,7 +141,7 @@ func (g *Generator) GetValue(columnData *Column, table *cfg.Table) (any, error) 
 	case "numeric":
 		result = postgres_types_generators.NumericGenerator()
 	case "uuid":
-		result = postgres_types_generators.UUIDGenerator(ok)
+		result = postgres_types_generators.UUIDGenerator(unique)
 	case "bit":
 		result = postgres_types_generators.BitGenerator()
 	case "jsonb":
@@ -157,13 +157,13 @@ func (g *Generator) GetValue(columnData *Column, table *cfg.Table) (any, error) 
 		}
 		result = gofakeit.IntRange(0, +2147483647)
 	case "text":
-		result = postgres_types_generators.RandStringRunes(10)
+		result = postgres_types_generators.RandStringRunes(g.Settings.Types.VarCharDefaultLength, unique)
 	case "smallint":
 		result = postgres_types_generators.SmallIntGenerator()
 	case "bigint":
 		result = postgres_types_generators.BigIntGenerator()
 	case "character varying":
-		result = postgres_types_generators.RandStringRunes(10)
+		result = postgres_types_generators.RandStringRunes(g.Settings.Types.VarCharDefaultLength, unique)
 	default:
 		return nil, errors.New(fmt.Sprintf("unknown type %s in table %s in database %s",
 			columnData.Schema.DataType,

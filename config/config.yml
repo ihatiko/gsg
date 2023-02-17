@@ -1,5 +1,7 @@
 settings:
-  defaultSet: 100000
+  defaultSet: 10000
+  types:
+    varcharDefaultLength: 10
   databases:
     - name: postgres
           #typeSettings: ["character varying length = 10"]

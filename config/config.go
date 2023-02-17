@@ -2,9 +2,12 @@ package config
 
 type Settings struct {
 	DefaultSet int
+	Types      Types
 	Databases  []*Database
 }
-
+type Types struct {
+	VarCharDefaultLength int
+}
 type Table struct {
 	Name string
 	Set  int

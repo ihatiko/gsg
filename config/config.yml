@@ -1,9 +1,9 @@
 settings:
-  defaultSet: 10000
+  defaultSet: 100000
   types:
     varcharDefaultLength: 10
   databases:
-    - name: postgres
+    - name: test_database
           #typeSettings: ["character varying length = 10"]
 
 # billing

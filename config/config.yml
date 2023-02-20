@@ -1,5 +1,12 @@
 settings:
-  defaultSet: 100000
+  connections:
+    - name: postgres
+      connection: "host=localhost port=5432 user=postgres dbname=postgres password=postgres sslmode=disable"
+  blackListPath: [
+    #connectionName_database_schema_table
+    "database_table_"
+  ]
+  defaultSet: 100
   types:
     varcharDefaultLength: 10
   databases:

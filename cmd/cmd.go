@@ -21,23 +21,25 @@ func Run() {
 	if err != nil {
 		panic(err)
 	}
-	Settings = cfg.Settings
-	pgCfg := &postgres.Config{
-		Host:     "localhost",
-		Password: "postgres",
-		PgDriver: "pgx",
-		Port:     "5432",
-		User:     "postgres",
-		SSLMode:  "disable",
-		Schema:   "public",
-	}
-	err = health(pgCfg)
-	if err != nil {
-		panic(err)
-	}
-	err = scanDatabase(pgCfg)
-	if err != nil {
-		panic(err)
+	for _, connections := cfg {
+		Settings = cfg.Settings
+		pgCfg := &postgres.Config{
+			Host:     "localhost",
+			Password: "postgres",
+			PgDriver: "pgx",
+			Port:     "5432",
+			User:     "postgres",
+			SSLMode:  "disable",
+			Schema:   "public",
+		}
+		err = health(pgCfg)
+		if err != nil {
+			panic(err)
+		}
+		err = scanDatabase(pgCfg)
+		if err != nil {
+			panic(err)
+		}
 	}
 }
 

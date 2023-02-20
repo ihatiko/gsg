@@ -1,16 +1,38 @@
 settings:
+  separator: "_"
+  dictionaryFolder: dictionary
   connections:
-    - name: postgres
-      connection: "host=localhost port=5432 user=postgres dbname=postgres password=postgres sslmode=disable"
+    - name: testDatabase
+      connection: "host=localhost port=5432 user=postgres dbname=test_database password=postgres sslmode=disable"
   blackListPath: [
     #connectionName_database_schema_table
     "database_table_"
   ]
   defaultSet: 100
-  types:
-    varcharDefaultLength: 10
+  defaultTypeSettings:
+    varcharLength: 10
+    numericRange:
+      in: 0
+      out: 10
   databases:
     - name: test_database
+      tables:
+        - name: currencies
+          set: 10
+          columns:
+            - name: created_at
+              settings:
+                range:
+                  in: 2022-01-01
+                unique: true
+                dictionary: names
+                annotation: connectionName_database_schema_table_column
+
+
+
+
+
+
           #typeSettings: ["character varying length = 10"]
 
 # billing

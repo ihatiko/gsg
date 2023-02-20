@@ -21,7 +21,8 @@ func Run() {
 	if err != nil {
 		panic(err)
 	}
-	for _, connections := cfg {
+	fmt.Println(cfg)
+	/*	for _, connection := range cfg.Settings.Connections {
 		Settings = cfg.Settings
 		pgCfg := &postgres.Config{
 			Host:     "localhost",
@@ -40,7 +41,7 @@ func Run() {
 		if err != nil {
 			panic(err)
 		}
-	}
+	}*/
 }
 
 func scanDatabase(postgresConfig *postgres.Config) error {

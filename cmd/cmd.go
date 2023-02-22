@@ -70,16 +70,18 @@ func scanDatabase(postgresConfig *postgres.Config) error {
 	}
 	return err
 }
+func ValidateDictionary() {
 
+}
 func ValidateSupportedTypes(Schemas []*generator.Schema, g *generator.Generator) bool {
 	state := false
-	for _, v := range Schemas {
+	/*	for _, v := range Schemas {
 		_, err := g.GetValue(&generator.Column{Schema: v, GeneratedData: nil}, nil)
 		if err != nil {
 			fmt.Println(err)
 			state = true
 		}
-	}
+	}*/
 	return state
 }
 

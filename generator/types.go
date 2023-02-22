@@ -33,9 +33,10 @@ type Column struct {
 }
 
 type Generator struct {
-	Db       *sqlx.DB
-	Settings *cfg.Settings
-	Enums    map[string]map[string][]string
+	Db         *sqlx.DB
+	Settings   *cfg.Settings
+	Enums      map[string]map[string][]string
+	Generators map[string]*ColumnGenerator
 }
 
 type Enum struct {

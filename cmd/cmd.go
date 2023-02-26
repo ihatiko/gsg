@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"github.com/ihatiko/config"
 	"github.com/jackc/pgx"
+	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	cfg "gsg/config"
 	"gsg/generator"
 	"gsg/postgres"
+	"strings"
 )
 
 const (
@@ -21,18 +23,19 @@ func Run() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(cfg)
+	Settings = cfg.Settings
+	err = health(Settings.Connections)
+	if err != nil {
+		panic(errors.Wrap(err, "Could not connect to databases"))
+	}
+	err = ValidateSupportedDatabaseTypes(Settings.Connections)
+	if err != nil {
+		panic(errors.Wrap(err, "Does not support types"))
+	}
+	for _, connection := range cfg.Settings.Connections {
+		fmt.Println(connection)
+	}
 	/*	for _, connection := range cfg.Settings.Connections {
-		Settings = cfg.Settings
-		pgCfg := &postgres.Config{
-			Host:     "localhost",
-			Password: "postgres",
-			PgDriver: "pgx",
-			Port:     "5432",
-			User:     "postgres",
-			SSLMode:  "disable",
-			Schema:   "public",
-		}
 		err = health(pgCfg)
 		if err != nil {
 			panic(err)
@@ -43,45 +46,67 @@ func Run() {
 		}
 	}*/
 }
-
-func scanDatabase(postgresConfig *postgres.Config) error {
-	var err error
-	for _, database := range Settings.Databases {
-		postgresConfig.Dbname = database.Name
-		db, err := (postgresConfig).NewConnection()
-
+func ValidateSupportedDatabaseTypes(connections []cfg.DatabaseConnection) error {
+	var resultError []error
+	for _, connection := range connections {
+		var databases []string
+		conn, err := connection.Connection.NewConnection()
 		if err != nil {
-			return fmt.Errorf("database error %s %v", postgresConfig.Dbname, err)
+			resultError = append(resultError, fmt.Errorf("database error %s %s %v", connection.Name, connection.Name, err))
 		}
-		var Schemas []*generator.Schema
-		err = db.Select(&Schemas, getDatabaseInfo)
+		err = conn.Select(&databases, getDatabasesQuery)
 		if err != nil {
-			return fmt.Errorf("database error %s %v", postgresConfig.Dbname, err)
+			panic(err)
 		}
-		generator := generator.NewGenerator(db, Settings)
-		if ValidateSupportedTypes(Schemas, generator) {
-			return nil
-		}
-
-		relations := ToRelations(Schemas)
-		for k, v := range relations {
-			InsertData(k, v, relations, database, generator)
-		}
+		//TODO добавить извлечение типа
 	}
-	return err
+	if len(resultError) == 0 {
+		return nil
+	}
+	errorFormatted := lo.Map(resultError, func(item error, index int) string {
+		return item.Error()
+	})
+	return errors.New(strings.Join(errorFormatted, "\n"))
+}
+func ProcessDatabase(connection cfg.DatabaseConnection) error {
+	/*	var err error
+		for _, database := range Settings.Databases {
+			postgresConfig.Dbname = database.Name
+			db, err := (postgresConfig).NewConnection()
+
+			if err != nil {
+				return fmt.Errorf("database error %s %v", postgresConfig.Dbname, err)
+			}
+			var Schemas []*generator.Schema
+			err = db.Select(&Schemas, getDatabaseInfoQuery)
+			if err != nil {
+				return fmt.Errorf("database error %s %v", postgresConfig.Dbname, err)
+			}
+			generator := generator.NewGenerator(db, Settings)
+			if ValidateSupportedTypes(Schemas, generator) {
+				return nil
+			}
+
+			relations := ToRelations(Schemas)
+			for k, v := range relations {
+				InsertData(k, v, relations, database, generator)
+			}
+		}
+		return err*/
 }
 func ValidateDictionary() {
 
 }
 func ValidateSupportedTypes(Schemas []*generator.Schema, g *generator.Generator) bool {
 	state := false
-	/*	for _, v := range Schemas {
+	for _, v := range Schemas {
+		g := generator.ColumnGenerator{Settings: Settings}
 		_, err := g.GetValue(&generator.Column{Schema: v, GeneratedData: nil}, nil)
 		if err != nil {
 			fmt.Println(err)
 			state = true
 		}
-	}*/
+	}
 	return state
 }
 
@@ -159,16 +184,21 @@ func ToRelations(schemas []*generator.Schema) map[string]*generator.Table {
 	return result
 }
 
-func health(cfg *postgres.Config) error {
-	var err error
-	for _, database := range Settings.Databases {
-		cfg.Dbname = database.Name
-		conn, err := (cfg).NewConnection()
+func health(connections []cfg.DatabaseConnection) error {
+	var resultError []error
+	for _, connection := range connections {
+		conn, err := connection.Connection.NewConnection()
 		if err != nil {
-			err = fmt.Errorf("database error %s %v", cfg.Dbname, err)
+			resultError = append(resultError, fmt.Errorf("database error %s %s %v", connection.Name, connection.Name, err))
 		}
 		conn.Close()
 		postgres.Connection.Close()
 	}
-	return err
+	if len(resultError) == 0 {
+		return nil
+	}
+	errorFormatted := lo.Map(resultError, func(item error, index int) string {
+		return item.Error()
+	})
+	return errors.New(strings.Join(errorFormatted, "\n"))
 }

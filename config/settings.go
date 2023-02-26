@@ -1,5 +1,7 @@
 package config
 
+import "gsg/postgres"
+
 type Config struct {
 	Settings *Settings
 }
@@ -13,5 +15,5 @@ type Settings struct {
 
 type DatabaseConnection struct {
 	Name       string
-	Connection string
+	Connection *postgres.Config
 }

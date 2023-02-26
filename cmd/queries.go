@@ -2,7 +2,7 @@ package cmd
 
 // language=sql
 const (
-	getDatabaseInfo = `
+	getDatabaseInfoQuery = `
 with dependencies as (
 select distinct kcu.table_name  as in_table,
                                       kcu.column_name as column_in, ccu.table_name as out_table,
@@ -31,4 +31,7 @@ where kcu.table_schema = 'public' and itc.constraint_type != 'PRIMARY KEY')
  where table_schema = 'public' and not exists(select * from information_schema.views iv
 where table_schema = 'public' and INFORMATION_SCHEMA.COLUMNS.table_name = iv.table_name)
 `
+
+	getDatabasesQuery = `SELECT datname as name FROM pg_database
+where datistemplate = false`
 )

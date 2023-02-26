@@ -30,6 +30,7 @@ func (c *Config) toPgConnection() string {
 	)
 	return dataSourceName
 }
+
 func (c *Config) NewConnection() (*sqlx.DB, error) {
 	config := stdlib.DriverConfig{
 		ConnConfig: pgx.ConnConfig{

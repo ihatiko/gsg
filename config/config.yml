@@ -1,12 +1,19 @@
 settings:
-  separator: "_"
-  dictionaryFolder: dictionary
+  separator: "//"
+  dictionaryFolder: "./dictionary"
   connections:
     - name: testDatabase
-      connection: "host=localhost port=5432 user=postgres dbname=test_database password=postgres sslmode=disable"
+      connection:
+        host: "localhost"
+        port: "5432"
+        user: "postgres"
+        password: "postgres"
+        dbname: "test"
+        sslMode: "disable"
+        schema: "public"
   blackListPath: [
-    #connectionName_database_schema_table
-    "database_table_"
+    #connectionName//database//schema//table
+    "testDatabase//postgres"
   ]
   defaultSet: 100
   defaultTypeSettings:
@@ -15,18 +22,18 @@ settings:
       in: 0
       out: 10
   databases:
-    - name: test_database
+    - name: test
       tables:
-        - name: currencies
+        - name: case1
           set: 10
           columns:
-            - name: created_at
+            - name: name
               settings:
                 range:
-                  in: 2022-01-01
+                  in: "2022-01-01"
                 unique: true
                 dictionary: names
-                annotation: connectionName_database_schema_table_column
+                #annotation: connectionName_database_schema_table_column
 
 
 

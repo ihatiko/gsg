@@ -1,24 +1,51 @@
 package generator
 
 import (
+	"database/sql"
 	"fmt"
 	"github.com/brianvoe/gofakeit/v6"
+	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 	cfg "gsg/config"
 	postgres_types_generators "gsg/postgres-types-generators"
 	"strings"
 )
 
+var Generators = map[string]*ColumnGenerator{}
+
 type ColumnGenerator struct {
 	Settings *cfg.Settings
+	Table    *Table
+	Column   *Column
+	Enum     []string
+	Db       *sqlx.DB
 }
 
-func (g *ColumnGenerator) GetValue(columnData *Column, table *cfg.Table) (any, error) {
+func NewColumnGenerator(settings *cfg.Settings, column *Column, db *sqlx.DB) *ColumnGenerator {
+	return &ColumnGenerator{Settings: settings, Db: db, Column: column}
+}
+
+func SetGenerator(settings *cfg.Settings, column *Column, db *sqlx.DB) *ColumnGenerator {
+	gen := NewColumnGenerator(settings, column, db)
+	Generators[column.Schema.GetKey()] = gen
+	return gen
+}
+
+func GetGenerator(settings *cfg.Settings, column *Column, db *sqlx.DB) *ColumnGenerator {
+	if data, ok := Generators[column.Schema.GetKey()]; ok {
+		return data
+	}
+	gen := NewColumnGenerator(settings, column, db)
+	Generators[column.Schema.GetKey()] = gen
+	return gen
+}
+
+func (g *ColumnGenerator) GetValue() (any, error) {
 	var result any
-	_, unique := columnData.Constraints["UNIQUE"]
-	switch columnData.Schema.DataType {
+	_, unique := g.Column.Constraints["UNIQUE"]
+	switch g.Column.Schema.DataType {
 	case "USER-DEFINED":
-		return g.GetCustomDatabaseType(columnData.Schema, table)
+		return g.GetCustomDatabaseType(g.Column.Schema)
 	case "date":
 		result = postgres_types_generators.DateGenerator()
 	case "timestamp with time zone":
@@ -36,11 +63,11 @@ func (g *ColumnGenerator) GetValue(columnData *Column, table *cfg.Table) (any, e
 	case "jsonb":
 		result = postgres_types_generators.JsonBGenerator()
 	case "integer":
-		if columnData.Schema.ColumnDefault != nil && strings.Contains(*columnData.Schema.ColumnDefault, "nextval") {
+		if g.Column.Schema.ColumnDefault != nil && strings.Contains(*g.Column.Schema.ColumnDefault, "nextval") {
 			result = postgres_types_generators.Serial(fmt.Sprintf("%s_%s_%s",
-				columnData.Schema.Database,
-				columnData.Schema.TableName,
-				columnData.Schema.ColumnName,
+				g.Column.Schema.Database,
+				g.Column.Schema.TableName,
+				g.Column.Schema.ColumnName,
 			))
 			break
 		}
@@ -55,12 +82,12 @@ func (g *ColumnGenerator) GetValue(columnData *Column, table *cfg.Table) (any, e
 		result = postgres_types_generators.RandStringRunes(g.Settings.DefaultTypeSettings.VarCharLength, unique)
 	default:
 		return nil, errors.New(fmt.Sprintf("unknown type %s in table %s in database %s",
-			columnData.Schema.DataType,
-			columnData.Schema.TableName,
-			columnData.Schema.Database,
+			g.Column.Schema.DataType,
+			g.Column.Schema.TableName,
+			g.Column.Schema.Database,
 		))
 	}
-	if columnData.Schema.IsNullable {
+	if g.Column.Schema.IsNullable {
 		if gofakeit.IntRange(0, 1) == 0 {
 			return nil, nil
 		}
@@ -68,29 +95,21 @@ func (g *ColumnGenerator) GetValue(columnData *Column, table *cfg.Table) (any, e
 	return result, nil
 }
 
-func (g *ColumnGenerator) GetCustomDatabaseType(columnData *Schema, table *cfg.Table) (any, error) {
-	/*	if g.Enums == nil {
-			var enum []*Enum
-			g.Enums = map[string]map[string][]string{}
-			err := g.Db.Select(&enum, getEnumData)
-			if err != nil && err != sql.ErrNoRows {
-				panic(err)
-			}
-			if enum != nil && len(enum) > 0 {
-				parsedEnum := map[string][]string{}
-				for _, v := range enum {
-					parsedEnum[v.Type] = append(parsedEnum[v.Type], v.Value)
-				}
-				g.Enums[columnData.Database] = parsedEnum
-			}
+func (g *ColumnGenerator) GetCustomDatabaseType(columnData *Schema) (any, error) {
+	enumKey := strings.Split(*columnData.ColumnDefault, "::")
+	if len(enumKey) < 2 {
+		return nil, errors.New(fmt.Sprintf("unknown type %s in table %s in database %s", columnData.DataType, columnData.TableName, columnData.Database))
+	}
+	if g.Enum == nil {
+		var enum []string
+		err := g.Db.Select(&enum, getEnumData, enumKey[1])
+		if err != nil && err != sql.ErrNoRows {
+			panic(err)
 		}
-		if v, ok := g.Enums[columnData.Database]; ok && columnData.ColumnDefault != nil {
-			enumKey := strings.Split(*columnData.ColumnDefault, "::")
-			if len(enumKey) < 2 {
-				return nil, errors.New(fmt.Sprintf("unknown type %s in table %s in database %s", columnData.DataType, columnData.TableName, columnData.Database))
-			}
-			enum := v[enumKey[1]]
-			return enum[rand.Intn(len(enum))], nil
-		}*/
-	return nil, errors.New(fmt.Sprintf("unknown type %s in table %s in database %s", columnData.DataType, columnData.TableName, columnData.Database))
+		if len(enum) == 0 {
+			return nil, errors.New(fmt.Sprintf("unknown type %s in table %s in database %s", columnData.DataType, columnData.TableName, columnData.Database))
+		}
+		g.Enum = enum
+	}
+	return postgres_types_generators.ByDictionaryStringRandom(g.Enum), nil
 }

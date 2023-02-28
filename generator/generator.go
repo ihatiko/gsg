@@ -26,7 +26,7 @@ func (g *Generator) GetColumnData(table *cfg.Table, schemas map[string]*Column, 
 	if count == 0 {
 		count = g.Settings.DefaultSet
 	}
-	return g.generate(table, count, schemas, relations)
+	return g.generate(count, schemas, relations)
 }
 
 type DataSet struct {
@@ -34,7 +34,7 @@ type DataSet struct {
 	Data    [][]any
 }
 
-func (g *Generator) generate(table *cfg.Table, count int, columns map[string]*Column, relations map[string]*Table) DataSet {
+func (g *Generator) generate(count int, columns map[string]*Column, relations map[string]*Table) DataSet {
 	dataset := DataSet{Data: [][]any{}, Columns: nil}
 	formatted := lo.Values(columns)
 	sort.Slice(formatted, func(i, j int) bool {
@@ -87,7 +87,9 @@ func (g *Generator) generate(table *cfg.Table, count int, columns map[string]*Co
 	}
 	return dataset
 }
-
 func (d *Schema) GetKey() string {
+	return fmt.Sprintf("%s.%s", d.Database, d.ColumnName)
+}
+func (d *Schema) GetDependencyKey() string {
 	return fmt.Sprintf("%s.%s.%s", d.Database, *d.DependencyTableName, *d.DependencyColumnName)
 }

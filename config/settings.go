@@ -15,5 +15,5 @@ type Settings struct {
 
 type DatabaseConnection struct {
 	Name       string
-	Connection *postgres.Config
+	Connection postgres.Config
 }

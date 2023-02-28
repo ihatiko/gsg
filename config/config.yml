@@ -8,7 +8,7 @@ settings:
         port: "5432"
         user: "postgres"
         password: "postgres"
-        dbname: "test"
+        dbname: "postgres"
         sslMode: "disable"
         schema: "public"
   blackListPath: [

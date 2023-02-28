@@ -18,8 +18,9 @@ const (
 )
 
 var Connection *pgx.Conn
+var Connections = map[string]*sqlx.DB{}
 
-func (c *Config) toPgConnection() string {
+func (c Config) toPgConnection() string {
 	dataSourceName := fmt.Sprintf("host=%s port=%s user=%s dbname=%s password=%s sslmode=%s",
 		c.Host,
 		c.Port,
@@ -30,8 +31,14 @@ func (c *Config) toPgConnection() string {
 	)
 	return dataSourceName
 }
-
-func (c *Config) NewConnection() (*sqlx.DB, error) {
+func (c Config) ChangeDb(database string) Config {
+	c.Dbname = database
+	return c
+}
+func (c Config) GetConnection() (*sqlx.DB, error) {
+	if data, ok := Connections[c.toPgConnection()]; ok {
+		return data, nil
+	}
 	config := stdlib.DriverConfig{
 		ConnConfig: pgx.ConnConfig{
 			PreferSimpleProtocol: true,
@@ -39,7 +46,7 @@ func (c *Config) NewConnection() (*sqlx.DB, error) {
 	}
 	stdlib.RegisterDriverConfig(&config)
 	connectionString := config.ConnectionString(c.toPgConnection())
-	db, err := sqlx.Connect(c.PgDriver, connectionString)
+	db, err := sqlx.Connect("pgx", connectionString)
 	if err != nil {
 		return nil, errors.Wrap(err, "Database.Connect")
 	}
@@ -61,5 +68,6 @@ func (c *Config) NewConnection() (*sqlx.DB, error) {
 	if err = db.Ping(); err != nil {
 		return nil, err
 	}
+	Connections[c.toPgConnection()] = db
 	return db, err
 }

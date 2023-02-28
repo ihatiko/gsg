@@ -19,6 +19,7 @@ type Schema struct {
 }
 
 type Table struct {
+	Name     string
 	Inserted bool
 	Columns  map[string]*Column
 }
@@ -40,6 +41,5 @@ type Generator struct {
 }
 
 type Enum struct {
-	Type  string `db:"type"`
 	Value string `db:"value"`
 }

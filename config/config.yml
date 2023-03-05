@@ -12,17 +12,18 @@ settings:
         sslMode: "disable"
         schema: "public"
   blackListPath: [
-    #connectionName//database//schema//table
-    "testDatabase//postgres"
+    "testDatabase//postgres//typeorm_metadata",
+    "testDatabase//postgres//user_migrations",
+    "testDatabase//postgres//migration",
   ]
   defaultSet: 100
   defaultTypeSettings:
-    varcharLength: 10
+    varcharLength: 100
     numericRange:
       in: 0
       out: 10
   databases:
-    - name: test
+    - name: postgres
       tables:
         - name: case1
           set: 10

@@ -11,6 +11,8 @@ type Settings struct {
 	DefaultTypeSettings Types
 	Databases           []*Database
 	Connections         []DatabaseConnection
+	BlackListPath       []string
+	Separator           string
 }
 
 type DatabaseConnection struct {

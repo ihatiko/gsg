@@ -1,10 +1,5 @@
 package generator
 
-import (
-	"github.com/jmoiron/sqlx"
-	cfg "gsg/config"
-)
-
 type Schema struct {
 	Database             string  `db:"table_catalog"`
 	TableName            string  `db:"table_name"`
@@ -19,25 +14,18 @@ type Schema struct {
 }
 
 type Table struct {
-	Name     string
-	Inserted bool
-	Columns  map[string]*Column
+	Name    string
+	Columns map[string]*Column
 }
 type Constraint struct {
-	DependencyTableName  string `db:"dependency_table_name"`
-	DependencyColumnName string `db:"dependency_column_name"`
+	DependencyTableName    string
+	DependencyColumnName   string
+	DependencyDatabaseName string
 }
 type Column struct {
 	GeneratedData []any
 	Schema        *Schema
 	Constraints   map[string]Constraint
-}
-
-type Generator struct {
-	Db         *sqlx.DB
-	Settings   *cfg.Settings
-	Enums      map[string]map[string][]string
-	Generators map[string]*ColumnGenerator
 }
 
 type Enum struct {

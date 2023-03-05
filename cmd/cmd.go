@@ -3,11 +3,13 @@ package cmd
 import (
 	"fmt"
 	"github.com/ihatiko/config"
+	"github.com/jackc/pgx"
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	cfg "gsg/config"
 	"gsg/generator"
+	"gsg/postgres"
 	"strings"
 )
 
@@ -22,6 +24,7 @@ type SchemasWrapper struct {
 
 var Settings *cfg.Settings
 var ColumnBuffer = map[string]*SchemasWrapper{}
+var BlackList = map[string]struct{}{}
 
 func Run() {
 	cfg, err := config.GetConfig[cfg.Config](configPath)
@@ -29,6 +32,17 @@ func Run() {
 		panic(err)
 	}
 	Settings = cfg.Settings
+	for _, blackListItem := range Settings.BlackListPath {
+		data := strings.Split(blackListItem, Settings.Separator)
+		if len(data) > 1 {
+			table := ""
+			if len(data) >= 2 {
+				table = data[2]
+			}
+			BlackList[fmt.Sprintf("%s%s%s", data[1], Settings.Separator, table)] = struct{}{}
+		}
+
+	}
 	err = health(Settings.Connections)
 	if err != nil {
 		panic(errors.Wrap(err, "Could not connect to databases"))
@@ -38,18 +52,60 @@ func Run() {
 		panic(errors.Wrap(err, "Does not support types"))
 	}
 	PrepareDataSets()
-
-	/*	for _, connection := range cfg.Settings.Connections {
-		err = health(pgCfg)
-		if err != nil {
-			panic(err)
-		}
-		err = scanDatabase(pgCfg)
-		if err != nil {
-			panic(err)
-		}
-	}*/
+	InsertData()
 }
+
+var Inserted = map[string]struct{}{}
+var GroupedTables = map[string][]*generator.ColumnGenerator{}
+
+func InsertData() {
+	GroupedTables = lo.GroupBy[*generator.ColumnGenerator, string](lo.Values(generator.Generators), func(item *generator.ColumnGenerator) string {
+		return fmt.Sprintf("%s%s%s", item.Column.Schema.Database, Settings.Separator, item.Column.Schema.TableName)
+	})
+	for k, gen := range GroupedTables {
+		InsertSingleTable(k, gen)
+	}
+}
+
+func InsertSingleTable(k string, gen []*generator.ColumnGenerator) {
+	if _, ok := Inserted[k]; ok {
+		return
+	}
+	dataSet := generator.DataSet{}
+	for _, tableColumns := range gen {
+		for kConstraint, constraint := range tableColumns.Column.Constraints {
+			if kConstraint == "FOREIGN KEY" {
+				key := fmt.Sprintf("%s%s%s", constraint.DependencyDatabaseName, Settings.Separator, constraint.DependencyTableName)
+				InsertSingleTable(
+					key,
+					GroupedTables[key],
+				)
+			}
+		}
+
+		dataSet.Columns = append(dataSet.Columns, tableColumns.Column.Schema.ColumnName)
+		for i, columnValue := range tableColumns.Column.GeneratedData {
+			if len(dataSet.Data) != len(tableColumns.Column.GeneratedData) {
+				dataSet.Data = append(dataSet.Data, []any{columnValue})
+			} else {
+				dataSet.Data[i] = append(dataSet.Data[i], []any{columnValue})
+			}
+		}
+	}
+	_, err := postgres.Connection.Exec(fmt.Sprintf("truncate %s cascade", gen[0].Column.Schema.TableName))
+	if err != nil {
+		panic(err)
+	}
+
+	bulkData := pgx.CopyFromRows(dataSet.Data)
+	_, err = postgres.Connection.CopyFrom([]string{gen[0].Column.Schema.TableName}, dataSet.Columns, bulkData)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(fmt.Sprintf("Inserted in database %s table %s", gen[0].Column.Schema.Database, gen[0].Column.Schema.TableName))
+	Inserted[k] = struct{}{}
+}
+
 func ValidateSupportedDatabaseTypes(connections []cfg.DatabaseConnection) error {
 	var resultError []error
 	for _, connection := range connections {
@@ -77,7 +133,7 @@ func ValidateSupportedDatabaseTypes(connections []cfg.DatabaseConnection) error 
 			if err := ValidateSupportedTypes(Schemas, conn); err != nil {
 				resultError = append(resultError, fmt.Errorf("ValidateSupportedTypes error %s %s \n%v", connection.Name, connection.Name, err))
 			}
-			ColumnBuffer[conn] = &SchemasWrapper{
+			ColumnBuffer[dbName] = &SchemasWrapper{
 				Db:      conn,
 				Schemas: Schemas,
 			}
@@ -93,11 +149,23 @@ func ValidateSupportedDatabaseTypes(connections []cfg.DatabaseConnection) error 
 }
 
 func PrepareDataSets() {
-	for db, columns := range ColumnBuffer {
+	for _, columns := range ColumnBuffer {
 		relations := ToRelations(columns.Schemas)
 		for _, v := range relations {
 			for _, column := range v.Columns {
-				generator.SetGenerator(Settings, column, db)
+				//TODO превратить заранее в мапу для оптимизации
+				database, _ := lo.Find[*cfg.Database](Settings.Databases, func(item *cfg.Database) bool {
+					return item.Name == column.Schema.Database
+				})
+				if database == nil {
+					generator.SetGenerator(Settings, column, columns.Db, nil, v)
+					return
+				}
+				//TODO превратить заранее в мапу для оптимизации
+				table, _ := lo.Find[*cfg.Table](database.Tables, func(item *cfg.Table) bool {
+					return item.Name == column.Schema.TableName
+				})
+				generator.SetGenerator(Settings, column, columns.Db, table, v)
 			}
 
 			FillDataSet(relations)
@@ -107,8 +175,8 @@ func PrepareDataSets() {
 
 func FillDataSet(relations map[string]*generator.Table) {
 	for _, relation := range relations {
-		for _, columns := range relation.Columns {
-
+		for _, column := range relation.Columns {
+			generator.GetGenerator(column).FillData()
 		}
 	}
 }
@@ -116,7 +184,10 @@ func FillDataSet(relations map[string]*generator.Table) {
 func ValidateSupportedTypes(Schemas []*generator.Schema, db *sqlx.DB) error {
 	var resultError []error
 	for _, v := range Schemas {
-		g := generator.GetGenerator(Settings, &generator.Column{Schema: v}, db)
+		if _, ok := BlackList[fmt.Sprintf("%s%s%s", v.Database, Settings.Separator, v.TableName)]; ok {
+			continue
+		}
+		g := generator.SetGenerator(Settings, &generator.Column{Schema: v}, db, nil, nil)
 		_, err := g.GetValue()
 		if err != nil {
 			resultError = append(resultError, err)
@@ -129,45 +200,6 @@ func ValidateSupportedTypes(Schemas []*generator.Schema, db *sqlx.DB) error {
 		return item.Error()
 	})
 	return errors.New(strings.Join(errorFormatted, "\n"))
-}
-
-func InsertData(relations map[string]*generator.Table) {
-	/*	if v.Inserted {
-			return
-		}
-		columns := lo.Values(v.Columns)
-		dependencyConstraints := lo.Reduce[*generator.Column, []generator.Constraint](columns, func(agg []generator.Constraint, item *generator.Column, index int) []generator.Constraint {
-			for k, constraint := range item.Constraints {
-				if k == "FOREIGN KEY" && tableName != constraint.DependencyTableName {
-					agg = append(agg, constraint)
-				}
-			}
-			return agg
-		}, []generator.Constraint{})
-
-		for _, dependencyTable := range dependencyConstraints {
-			dpd := relations[dependencyTable.DependencyTableName]
-			if !dpd.Inserted {
-				fmt.Println(fmt.Sprintf("Redirect create %s -> %s", tableName, dependencyTable.DependencyTableName))
-				InsertData(dependencyTable.DependencyTableName, relations[dependencyTable.DependencyTableName], relations)
-			}
-		}
-
-		metaTable, _ := lo.Find[*cfg.Table](database.Tables, func(item *cfg.Table) bool {
-			return item.Name == tableName
-		})
-		_, err := postgres.Connection.Exec(fmt.Sprintf("truncate %s cascade", tableName))
-		if err != nil {
-			panic(err)
-		}
-		dataSet := generator.GetColumnData(metaTable, v.Columns, relations)
-		bulkData := pgx.CopyFromRows(dataSet.Data)
-		_, err = postgres.Connection.CopyFrom([]string{tableName}, dataSet.Columns, bulkData)
-		if err != nil {
-			panic(err)
-		}
-		fmt.Println(fmt.Sprintf("Inserted in database %s table %s", database.Name, tableName))
-		v.Inserted = true*/
 }
 
 func ToRelations(schemas []*generator.Schema) map[string]*generator.Table {
@@ -186,12 +218,16 @@ func ToRelations(schemas []*generator.Schema) map[string]*generator.Table {
 
 		for _, data := range wrappedColumns {
 			wrappedColumn := data[0]
+			if _, ok := BlackList[fmt.Sprintf("%s%s%s", wrappedColumn.Schema.Database, Settings.Separator, wrappedColumn.Schema.TableName)]; ok {
+				break
+			}
 			wrappedColumn.Constraints = map[string]generator.Constraint{}
 			for _, constraints := range data {
 				if constraints.Schema.ConstraintType != nil {
 					wrappedColumn.Constraints[*constraints.Schema.ConstraintType] = generator.Constraint{
-						DependencyColumnName: *constraints.Schema.DependencyColumnName,
-						DependencyTableName:  *constraints.Schema.DependencyTableName,
+						DependencyColumnName:   *constraints.Schema.DependencyColumnName,
+						DependencyTableName:    *constraints.Schema.DependencyTableName,
+						DependencyDatabaseName: constraints.Schema.Database,
 					}
 				}
 			}
@@ -202,9 +238,8 @@ func ToRelations(schemas []*generator.Schema) map[string]*generator.Table {
 		}
 
 		result[key] = &generator.Table{
-			Name:     key,
-			Columns:  formattedColumns,
-			Inserted: false,
+			Name:    key,
+			Columns: formattedColumns,
 		}
 	}
 	return result

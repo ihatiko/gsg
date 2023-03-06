@@ -4,10 +4,10 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/brianvoe/gofakeit/v6"
-	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	cfg "gsg/config"
+	"gsg/postgres"
 	postgres_types_generators "gsg/postgres-types-generators"
 	"strings"
 )
@@ -24,15 +24,15 @@ type ColumnGenerator struct {
 	Table         *Table
 	Column        *Column
 	Enum          []string
-	Db            *sqlx.DB
+	Db            *postgres.ConnectionSet
 	TableSettings *cfg.Table
 }
 
-func NewColumnGenerator(settings *cfg.Settings, column *Column, db *sqlx.DB, tableSettings *cfg.Table, table *Table) *ColumnGenerator {
+func NewColumnGenerator(settings *cfg.Settings, column *Column, db *postgres.ConnectionSet, tableSettings *cfg.Table, table *Table) *ColumnGenerator {
 	return &ColumnGenerator{Settings: settings, Db: db, Column: column, TableSettings: tableSettings, Table: table}
 }
 
-func SetGenerator(settings *cfg.Settings, column *Column, db *sqlx.DB, tableSettings *cfg.Table, table *Table) *ColumnGenerator {
+func SetGenerator(settings *cfg.Settings, column *Column, db *postgres.ConnectionSet, tableSettings *cfg.Table, table *Table) *ColumnGenerator {
 	gen := NewColumnGenerator(settings, column, db, tableSettings, table)
 	Generators[column.Schema.GetKey()] = gen
 	return gen
@@ -174,7 +174,7 @@ func (g *ColumnGenerator) GetCustomDatabaseType(columnData *Schema) (any, error)
 	}
 	if g.Enum == nil {
 		var enum []string
-		err := g.Db.Select(&enum, getEnumData, enumKey[1])
+		err := g.Db.SqlxConn.Select(&enum, getEnumData, enumKey[1])
 		if err != nil && err != sql.ErrNoRows {
 			panic(err)
 		}

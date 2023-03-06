@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/ihatiko/config"
 	"github.com/jackc/pgx"
-	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	cfg "gsg/config"
@@ -19,7 +18,7 @@ const (
 
 type SchemasWrapper struct {
 	Schemas []*generator.Schema
-	Db      *sqlx.DB
+	Db      *postgres.ConnectionSet
 }
 
 var Settings *cfg.Settings
@@ -76,10 +75,12 @@ func InsertSingleTable(k string, gen []*generator.ColumnGenerator) {
 		for kConstraint, constraint := range tableColumns.Column.Constraints {
 			if kConstraint == "FOREIGN KEY" {
 				key := fmt.Sprintf("%s%s%s", constraint.DependencyDatabaseName, Settings.Separator, constraint.DependencyTableName)
-				InsertSingleTable(
-					key,
-					GroupedTables[key],
-				)
+				if _, ok := GroupedTables[key]; !ok {
+					InsertSingleTable(
+						key,
+						GroupedTables[key],
+					)
+				}
 			}
 		}
 
@@ -92,13 +93,13 @@ func InsertSingleTable(k string, gen []*generator.ColumnGenerator) {
 			}
 		}
 	}
-	_, err := postgres.Connection.Exec(fmt.Sprintf("truncate %s cascade", gen[0].Column.Schema.TableName))
+	_, err := gen[0].Db.PgxConn.Exec(fmt.Sprintf("truncate %s cascade", gen[0].Column.Schema.TableName))
 	if err != nil {
 		panic(err)
 	}
 
 	bulkData := pgx.CopyFromRows(dataSet.Data)
-	_, err = postgres.Connection.CopyFrom([]string{gen[0].Column.Schema.TableName}, dataSet.Columns, bulkData)
+	_, err = gen[0].Db.PgxConn.CopyFrom([]string{gen[0].Column.Schema.TableName}, dataSet.Columns, bulkData)
 	if err != nil {
 		panic(err)
 	}
@@ -114,7 +115,7 @@ func ValidateSupportedDatabaseTypes(connections []cfg.DatabaseConnection) error 
 		if err != nil {
 			resultError = append(resultError, fmt.Errorf("database error %s %s \n%v", connection.Name, connection.Name, err))
 		}
-		err = conn.Select(&databases, getDatabasesQuery)
+		err = conn.SqlxConn.Select(&databases, getDatabasesQuery)
 		if err != nil {
 			panic(err)
 		}
@@ -124,7 +125,7 @@ func ValidateSupportedDatabaseTypes(connections []cfg.DatabaseConnection) error 
 				panic(err)
 			}
 			var Schemas []*generator.Schema
-			err = conn.Select(&Schemas, getDatabaseInfoQuery)
+			err = conn.SqlxConn.Select(&Schemas, getDatabaseInfoQuery)
 			if err != nil {
 				resultError = append(resultError, fmt.Errorf("database error %s %v", dbName, err))
 				continue
@@ -181,7 +182,7 @@ func FillDataSet(relations map[string]*generator.Table) {
 	}
 }
 
-func ValidateSupportedTypes(Schemas []*generator.Schema, db *sqlx.DB) error {
+func ValidateSupportedTypes(Schemas []*generator.Schema, db *postgres.ConnectionSet) error {
 	var resultError []error
 	for _, v := range Schemas {
 		if _, ok := BlackList[fmt.Sprintf("%s%s%s", v.Database, Settings.Separator, v.TableName)]; ok {

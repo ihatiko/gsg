@@ -17,8 +17,12 @@ const (
 	connMaxIdleTime    = 20
 )
 
-var Connection *pgx.Conn
-var Connections = map[string]*sqlx.DB{}
+var Connections = map[string]*ConnectionSet{}
+
+type ConnectionSet struct {
+	SqlxConn *sqlx.DB
+	PgxConn  *pgx.Conn
+}
 
 func (c Config) toPgConnection() string {
 	dataSourceName := fmt.Sprintf("host=%s port=%s user=%s dbname=%s password=%s sslmode=%s",
@@ -35,7 +39,7 @@ func (c Config) ChangeDb(database string) Config {
 	c.Dbname = database
 	return c
 }
-func (c Config) GetConnection() (*sqlx.DB, error) {
+func (c Config) GetConnection() (*ConnectionSet, error) {
 	if data, ok := Connections[c.toPgConnection()]; ok {
 		return data, nil
 	}
@@ -54,13 +58,10 @@ func (c Config) GetConnection() (*sqlx.DB, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "pgx.ParseConnectionString(connectionString)")
 	}
-	if Connection == nil || !Connection.IsAlive() {
-		Connection, err = pgx.Connect(pgxConnectionString)
-		if err != nil {
-			return nil, errors.Wrap(err, "pgx.Connect(pgxConnectionString)")
-		}
+	pgxConn, err := pgx.Connect(pgxConnectionString)
+	if err != nil {
+		return nil, errors.Wrap(err, "pgx.Connect(pgxConnectionString)")
 	}
-
 	db.SetMaxOpenConns(maxOpenConnections)
 	db.SetConnMaxLifetime(connMaxLifetime * time.Second)
 	db.SetMaxIdleConns(maxIdleConnections)
@@ -68,6 +69,10 @@ func (c Config) GetConnection() (*sqlx.DB, error) {
 	if err = db.Ping(); err != nil {
 		return nil, err
 	}
-	Connections[c.toPgConnection()] = db
-	return db, err
+	connSet := &ConnectionSet{
+		SqlxConn: db,
+		PgxConn:  pgxConn,
+	}
+	Connections[c.toPgConnection()] = connSet
+	return connSet, err
 }

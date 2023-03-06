@@ -61,6 +61,12 @@ func InsertData() {
 	GroupedTables = lo.GroupBy[*generator.ColumnGenerator, string](lo.Values(generator.Generators), func(item *generator.ColumnGenerator) string {
 		return fmt.Sprintf("%s%s%s", item.Column.Schema.Database, Settings.Separator, item.Column.Schema.TableName)
 	})
+	for _, gen := range GroupedTables {
+		_, err := gen[0].Db.PgxConn.Exec(fmt.Sprintf("truncate %s cascade", gen[0].Column.Schema.TableName))
+		if err != nil {
+			panic(err)
+		}
+	}
 	for k, gen := range GroupedTables {
 		InsertSingleTable(k, gen)
 	}
@@ -94,13 +100,9 @@ func InsertSingleTable(k string, gen []*generator.ColumnGenerator) {
 			dataSet.Data[i][j] = columnValue
 		}
 	}
-	_, err := gen[0].Db.PgxConn.Exec(fmt.Sprintf("truncate %s cascade", gen[0].Column.Schema.TableName))
-	if err != nil {
-		panic(err)
-	}
 
 	bulkData := pgx.CopyFromRows(dataSet.Data)
-	_, err = gen[0].Db.PgxConn.CopyFrom([]string{gen[0].Column.Schema.TableName}, dataSet.Columns, bulkData)
+	_, err := gen[0].Db.PgxConn.CopyFrom([]string{gen[0].Column.Schema.TableName}, dataSet.Columns, bulkData)
 	if err != nil {
 		panic(err.Error())
 	}

@@ -16,7 +16,7 @@ settings:
     "testDatabase//postgres//user_migrations",
     "testDatabase//postgres//migration",
   ]
-  defaultSet: 100
+  defaultSet: 10
   defaultTypeSettings:
     varcharLength: 10
     numericRange:

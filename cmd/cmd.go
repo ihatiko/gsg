@@ -70,8 +70,10 @@ func InsertSingleTable(k string, gen []*generator.ColumnGenerator) {
 	if _, ok := Inserted[k]; ok {
 		return
 	}
-	dataSet := generator.DataSet{}
-	for _, tableColumns := range gen {
+	dataSet := generator.DataSet{
+		Columns: make([]string, len(gen)),
+		Data:    make([][]any, len(gen[0].Column.GeneratedData))}
+	for j, tableColumns := range gen {
 		for kConstraint, constraint := range tableColumns.Column.Constraints {
 			if kConstraint == "FOREIGN KEY" {
 				key := fmt.Sprintf("%s%s%s", constraint.DependencyDatabaseName, Settings.Separator, constraint.DependencyTableName)
@@ -84,13 +86,12 @@ func InsertSingleTable(k string, gen []*generator.ColumnGenerator) {
 			}
 		}
 		//TODO Теряется каст типа , утром пофиксить
-		dataSet.Columns = append(dataSet.Columns, tableColumns.Column.Schema.ColumnName)
+		dataSet.Columns[j] = tableColumns.Column.Schema.ColumnName
 		for i, columnValue := range tableColumns.Column.GeneratedData {
-			if len(dataSet.Data) != len(tableColumns.Column.GeneratedData) {
-				dataSet.Data = append(dataSet.Data, []any{columnValue})
-			} else {
-				dataSet.Data[i] = append(dataSet.Data[i], []any{columnValue})
+			if len(dataSet.Data[i]) == 0 {
+				dataSet.Data[i] = make([]any, len(gen))
 			}
+			dataSet.Data[i][j] = columnValue
 		}
 	}
 	_, err := gen[0].Db.PgxConn.Exec(fmt.Sprintf("truncate %s cascade", gen[0].Column.Schema.TableName))

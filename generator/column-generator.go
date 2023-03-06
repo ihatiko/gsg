@@ -159,6 +159,7 @@ func (g *ColumnGenerator) GetValue() (any, error) {
 			g.Column.Schema.Database,
 		))
 	}
+	//TODO Добавить шанс срабатывания
 	if g.Column.Schema.IsNullable {
 		if gofakeit.IntRange(0, 1) == 0 {
 			return nil, nil

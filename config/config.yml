@@ -18,7 +18,7 @@ settings:
   ]
   defaultSet: 100
   defaultTypeSettings:
-    varcharLength: 100
+    varcharLength: 10
     numericRange:
       in: 0
       out: 10

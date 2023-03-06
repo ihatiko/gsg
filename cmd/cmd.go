@@ -83,7 +83,7 @@ func InsertSingleTable(k string, gen []*generator.ColumnGenerator) {
 				}
 			}
 		}
-
+		//TODO Теряется каст типа , утром пофиксить
 		dataSet.Columns = append(dataSet.Columns, tableColumns.Column.Schema.ColumnName)
 		for i, columnValue := range tableColumns.Column.GeneratedData {
 			if len(dataSet.Data) != len(tableColumns.Column.GeneratedData) {

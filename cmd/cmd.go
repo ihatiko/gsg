@@ -77,7 +77,7 @@ func InsertSingleTable(k string, gen []*generator.ColumnGenerator) {
 		for kConstraint, constraint := range tableColumns.Column.Constraints {
 			if kConstraint == "FOREIGN KEY" {
 				key := fmt.Sprintf("%s%s%s", constraint.DependencyDatabaseName, Settings.Separator, constraint.DependencyTableName)
-				if _, ok := GroupedTables[key]; !ok {
+				if _, ok := Inserted[key]; !ok {
 					InsertSingleTable(
 						key,
 						GroupedTables[key],
@@ -102,7 +102,7 @@ func InsertSingleTable(k string, gen []*generator.ColumnGenerator) {
 	bulkData := pgx.CopyFromRows(dataSet.Data)
 	_, err = gen[0].Db.PgxConn.CopyFrom([]string{gen[0].Column.Schema.TableName}, dataSet.Columns, bulkData)
 	if err != nil {
-		panic(err)
+		panic(err.Error())
 	}
 	fmt.Println(fmt.Sprintf("Inserted in database %s table %s", gen[0].Column.Schema.Database, gen[0].Column.Schema.TableName))
 	Inserted[k] = struct{}{}

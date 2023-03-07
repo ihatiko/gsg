@@ -84,6 +84,7 @@ func InsertSingleTable(k string, gen []*generator.ColumnGenerator) {
 			if kConstraint == "FOREIGN KEY" {
 				key := fmt.Sprintf("%s%s%s", constraint.DependencyDatabaseName, Settings.Separator, constraint.DependencyTableName)
 				if _, ok := Inserted[key]; !ok {
+					fmt.Println(fmt.Sprintf("%s redirect -> %s", k, key))
 					InsertSingleTable(
 						key,
 						GroupedTables[key],
@@ -104,7 +105,8 @@ func InsertSingleTable(k string, gen []*generator.ColumnGenerator) {
 	bulkData := pgx.CopyFromRows(dataSet.Data)
 	_, err := gen[0].Db.PgxConn.CopyFrom([]string{gen[0].Column.Schema.TableName}, dataSet.Columns, bulkData)
 	if err != nil {
-		panic(err.Error())
+		detailedError := err.(pgx.PgError)
+		panic(detailedError.Detail)
 	}
 	fmt.Println(fmt.Sprintf("Inserted in database %s table %s", gen[0].Column.Schema.Database, gen[0].Column.Schema.TableName))
 	Inserted[k] = struct{}{}
@@ -163,7 +165,7 @@ func PrepareDataSets() {
 				})
 				if database == nil {
 					generator.SetGenerator(Settings, column, columns.Db, nil, v)
-					return
+					continue
 				}
 				//TODO превратить заранее в мапу для оптимизации
 				table, _ := lo.Find[*cfg.Table](database.Tables, func(item *cfg.Table) bool {

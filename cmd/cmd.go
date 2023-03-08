@@ -81,7 +81,7 @@ func InsertSingleTable(k string, gen []*generator.ColumnGenerator) {
 		Data:    make([][]any, len(gen[0].Column.GeneratedData))}
 	for j, tableColumns := range gen {
 		for kConstraint, constraint := range tableColumns.Column.Constraints {
-			if kConstraint == "FOREIGN KEY" {
+			if kConstraint == "FOREIGN KEY" && constraint.DependencyTableName != tableColumns.Column.Schema.TableName {
 				key := fmt.Sprintf("%s%s%s", constraint.DependencyDatabaseName, Settings.Separator, constraint.DependencyTableName)
 				if _, ok := Inserted[key]; !ok {
 					fmt.Println(fmt.Sprintf("%s redirect -> %s", k, key))
@@ -92,7 +92,6 @@ func InsertSingleTable(k string, gen []*generator.ColumnGenerator) {
 				}
 			}
 		}
-		//TODO Теряется каст типа , утром пофиксить
 		dataSet.Columns[j] = tableColumns.Column.Schema.ColumnName
 		for i, columnValue := range tableColumns.Column.GeneratedData {
 			if len(dataSet.Data[i]) == 0 {
@@ -100,6 +99,7 @@ func InsertSingleTable(k string, gen []*generator.ColumnGenerator) {
 			}
 			dataSet.Data[i][j] = columnValue
 		}
+
 	}
 
 	bulkData := pgx.CopyFromRows(dataSet.Data)

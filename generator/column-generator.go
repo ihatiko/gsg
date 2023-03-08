@@ -6,6 +6,7 @@ import (
 	"github.com/brianvoe/gofakeit/v6"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	uuid "github.com/satori/go.uuid"
 	cfg "gsg/config"
 	"gsg/postgres"
 	postgres_types_generators "gsg/postgres-types-generators"
@@ -79,7 +80,8 @@ func (g *ColumnGenerator) FillRandomValues(count int) {
 func (g *ColumnGenerator) FillDependencyValues(count int) bool {
 	if g.Column.Constraints != nil {
 		if data, ok := g.Column.Constraints["FOREIGN KEY"]; ok {
-			constrainGen := Generators[data.GetDependencyKey()]
+			key := data.GetDependencyKey()
+			constrainGen := Generators[key]
 			if len(constrainGen.Column.GeneratedData) == 0 {
 				constrainGen.FillData()
 			}

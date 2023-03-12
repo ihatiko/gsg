@@ -76,12 +76,13 @@ func InsertSingleTable(k string, gen []*generator.ColumnGenerator) {
 	if _, ok := Inserted[k]; ok {
 		return
 	}
+	gData := generator.GeneratedSets[gen[0].Column.Schema.GetKey()]
 	dataSet := generator.DataSet{
 		Columns: make([]string, len(gen)),
-		Data:    make([][]any, len(gen[0].Column.GeneratedData))}
+		Data:    make([][]any, len(gData.GeneratedData))}
 	dataSetString := generator.DataSet{
 		Columns: make([]string, len(gen)),
-		Data:    make([][]any, len(gen[0].Column.GeneratedData))}
+		Data:    make([][]any, len(gData.GeneratedData))}
 
 	for j, tableColumns := range gen {
 		for kConstraint, constraint := range tableColumns.Column.Constraints {
@@ -95,14 +96,15 @@ func InsertSingleTable(k string, gen []*generator.ColumnGenerator) {
 				}
 			}
 		}
+		genData := generator.GeneratedSets[tableColumns.Column.Schema.GetKey()]
 		dataSet.Columns[j] = tableColumns.Column.Schema.ColumnName
-		for i, columnValue := range tableColumns.Column.GeneratedData {
+		for i, columnValue := range genData.GeneratedData {
 			if len(dataSet.Data[i]) == 0 {
 				dataSet.Data[i] = make([]any, len(gen))
 				dataSetString.Data[i] = make([]any, len(gen))
 			}
 			dataSet.Data[i][j] = columnValue
-			dataSetString.Data[i][j] = tableColumns.Column.ToStringGeneratedData[i]
+			dataSetString.Data[i][j] = genData.ToStringGeneratedData[i]
 		}
 
 	}
@@ -192,9 +194,7 @@ func PrepareDataSets() {
 func FillDataSet(relations map[string]*generator.Table) {
 	for _, relation := range relations {
 		for _, column := range relation.Columns {
-			currentGen := generator.GetGenerator(column)
-			generator.SetGenerator(currentGen.Settings, column, currentGen.Db, currentGen.TableSettings, currentGen.Table).
-				FillData()
+			generator.GetGenerator(column).FillData()
 		}
 	}
 }
@@ -227,7 +227,7 @@ func ToRelations(schemas []*generator.Schema) map[string]*generator.Table {
 	})
 	for key, tables := range tableGroup {
 		columns := lo.Map[*generator.Schema, *generator.Column](tables, func(item *generator.Schema, index int) *generator.Column {
-			return &generator.Column{Schema: item, GeneratedData: nil}
+			return &generator.Column{Schema: item}
 		})
 		formattedColumns := map[string]*generator.Column{}
 		wrappedColumns := lo.GroupBy[*generator.Column, string](columns, func(item *generator.Column) string {

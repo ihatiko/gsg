@@ -13,12 +13,16 @@ import (
 )
 
 var Generators = map[string]*ColumnGenerator{}
+var GeneratedSets = map[string]*GeneratedData{}
 
 type DataSet struct {
 	Columns []string
 	Data    [][]any
 }
-
+type GeneratedData struct {
+	GeneratedData         []any
+	ToStringGeneratedData []string
+}
 type ColumnGenerator struct {
 	Settings      *cfg.Settings
 	Table         *Table
@@ -43,7 +47,7 @@ func GetGenerator(column *Column) *ColumnGenerator {
 }
 
 func (g *ColumnGenerator) FillData() {
-	if len(g.Column.GeneratedData) > 0 {
+	if _, ok := GeneratedSets[g.Column.Schema.GetKey()]; ok {
 		return
 	}
 	count := 0
@@ -64,18 +68,22 @@ func (g *ColumnGenerator) FillData() {
 }
 
 func (g *ColumnGenerator) FillUniqueValues(count int) {
+	data := &GeneratedData{}
 	for i := 0; i < count; i++ {
 		val, valToString, _ := g.GetValue()
-		g.Column.GeneratedData = append(g.Column.GeneratedData, val)
-		g.Column.ToStringGeneratedData = append(g.Column.ToStringGeneratedData, valToString)
+		data.GeneratedData = append(data.GeneratedData, val)
+		data.ToStringGeneratedData = append(data.ToStringGeneratedData, valToString)
 	}
+	GeneratedSets[g.Column.Schema.GetKey()] = data
 }
 func (g *ColumnGenerator) FillRandomValues(count int) {
+	data := &GeneratedData{}
 	for i := 0; i < count; i++ {
 		val, valToString, _ := g.GetValue()
-		g.Column.GeneratedData = append(g.Column.GeneratedData, val)
-		g.Column.ToStringGeneratedData = append(g.Column.ToStringGeneratedData, valToString)
+		data.GeneratedData = append(data.GeneratedData, val)
+		data.ToStringGeneratedData = append(data.ToStringGeneratedData, valToString)
 	}
+	GeneratedSets[g.Column.Schema.GetKey()] = data
 }
 
 type GenSet struct {
@@ -88,8 +96,10 @@ func (g *ColumnGenerator) FillDependencyValues(count int) bool {
 		if data, ok := g.Column.Constraints["FOREIGN KEY"]; ok {
 			key := data.GetDependencyKey()
 			constrainGen := Generators[key]
-			if len(constrainGen.Column.GeneratedData) == 0 {
+			generatedSet, okGen := GeneratedSets[constrainGen.Column.Schema.GetKey()]
+			if !okGen {
 				constrainGen.FillData()
+				generatedSet = GeneratedSets[constrainGen.Column.Schema.GetKey()]
 			}
 
 			var set []GenSet
@@ -97,9 +107,9 @@ func (g *ColumnGenerator) FillDependencyValues(count int) bool {
 				if count <= len(set) {
 					break
 				}
-				for i := range constrainGen.Column.GeneratedData {
-					resultValue := constrainGen.Column.GeneratedData[i]
-					resultToValue := constrainGen.Column.ToStringGeneratedData[i]
+				for i := range generatedSet.GeneratedData {
+					resultValue := generatedSet.GeneratedData[i]
+					resultToValue := generatedSet.ToStringGeneratedData[i]
 					if g.Column.Schema.IsNullable {
 						if gofakeit.IntRange(0, 1) == 0 {
 							resultValue = nil
@@ -113,25 +123,23 @@ func (g *ColumnGenerator) FillDependencyValues(count int) bool {
 				}
 			}
 			set = lo.Shuffle(set[:count])
-
+			currentGeneratedSet := &GeneratedData{}
 			for _, setData := range set {
-				g.Column.GeneratedData = append(g.Column.GeneratedData, setData.Data)
-				g.Column.ToStringGeneratedData = append(g.Column.ToStringGeneratedData, setData.ToStringData)
+				currentGeneratedSet.GeneratedData = append(generatedSet.GeneratedData, setData.Data)
+				currentGeneratedSet.ToStringGeneratedData = append(generatedSet.ToStringGeneratedData, setData.ToStringData)
 			}
-
+			GeneratedSets[g.Column.Schema.GetKey()] = currentGeneratedSet
 			return true
 		}
 	}
 	return false
 }
-func GetColumnByDependencyKey(database, tableName, columnName string) string {
-	return fmt.Sprintf("%s.%s.%s", database, tableName, columnName)
-}
+
 func (d *Schema) GetKey() string {
-	return fmt.Sprintf("%s.%s.%s", d.Database, d.TableName, d.ColumnName)
+	return fmt.Sprintf("%s//%s//%s", d.Database, d.TableName, d.ColumnName)
 }
 func (d *Constraint) GetDependencyKey() string {
-	return fmt.Sprintf("%s.%s.%s", d.DependencyDatabaseName, d.DependencyTableName, d.DependencyColumnName)
+	return fmt.Sprintf("%s//%s//%s", d.DependencyDatabaseName, d.DependencyTableName, d.DependencyColumnName)
 }
 
 func (g *ColumnGenerator) GetValue() (any, string, error) {

@@ -1,7 +1,12 @@
 package postgres_types_generators
 
-import "github.com/brianvoe/gofakeit/v6"
+import (
+	"github.com/brianvoe/gofakeit/v6"
+	"strconv"
+)
 
-func BigIntGenerator() any {
-	return gofakeit.IntRange(-1000, 1000)
+func BigIntGenerator() (any, string) {
+	data := gofakeit.IntRange(-1000, 1000)
+	stringData := strconv.Itoa(data)
+	return data, stringData
 }

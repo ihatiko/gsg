@@ -9,6 +9,7 @@ var various = []any{
 	&pgtype.Bit{Bytes: []byte{1}, Len: 1, Status: pgtype.Present},
 }
 
-func BitGenerator() any {
-	return various[rand.Intn(len(various))]
+func BitGenerator() (any, string) {
+	data := various[rand.Intn(len(various))]
+	return data, "&pgtype.Bit"
 }

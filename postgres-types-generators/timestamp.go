@@ -11,7 +11,8 @@ func prevYear(t time.Time) time.Time {
 	return time.Date(y-1, m, 1, 0, 0, 0, 0, time.UTC)
 }
 
-func TimeStampGenerator() any {
+func TimeStampGenerator() (any, string) {
 	//TODO range generator
-	return carbon.FromStdTime(gofakeit.DateRange(prevYear(time.Now()), time.Now())).ToStdTime()
+	data := carbon.FromStdTime(gofakeit.DateRange(prevYear(time.Now()), time.Now())).ToStdTime()
+	return data, data.String()
 }

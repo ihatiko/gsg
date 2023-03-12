@@ -12,11 +12,11 @@ settings:
         sslMode: "disable"
         schema: "public"
   blackListPath: [
-    "testDatabase//postgres//typeorm_metadata",
-    "testDatabase//postgres//user_migrations",
-    "testDatabase//postgres//migration",
+    "testDatabase//test_database//typeorm_metadata",
+    "testDatabase//test_database//user_migrations",
+    "testDatabase//test_database//migration",
   ]
-  defaultSet: 10
+  defaultSet: 1
   defaultTypeSettings:
     varcharLength: 10
     numericRange:

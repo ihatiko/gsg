@@ -3,7 +3,7 @@ package postgres_types_generators
 import "github.com/brianvoe/gofakeit/v6"
 
 // TODO json parser and generator
-func JsonBGenerator() any {
+func JsonBGenerator() (any, string) {
 	//TODO date-range-rule
 	data, _ := gofakeit.JSON(&gofakeit.JSONOptions{
 		Type: "object",
@@ -15,5 +15,5 @@ func JsonBGenerator() any {
 		},
 		Indent: true,
 	})
-	return data
+	return data, string(data)
 }

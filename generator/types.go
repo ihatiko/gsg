@@ -23,9 +23,10 @@ type Constraint struct {
 	DependencyDatabaseName string
 }
 type Column struct {
-	GeneratedData []any
-	Schema        *Schema
-	Constraints   map[string]Constraint
+	GeneratedData         []any
+	ToStringGeneratedData []string
+	Schema                *Schema
+	Constraints           map[string]Constraint
 }
 
 type Enum struct {

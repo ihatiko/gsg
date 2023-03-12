@@ -6,7 +6,6 @@ import (
 	"github.com/brianvoe/gofakeit/v6"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
-	uuid "github.com/satori/go.uuid"
 	cfg "gsg/config"
 	"gsg/postgres"
 	postgres_types_generators "gsg/postgres-types-generators"
@@ -66,48 +65,68 @@ func (g *ColumnGenerator) FillData() {
 
 func (g *ColumnGenerator) FillUniqueValues(count int) {
 	for i := 0; i < count; i++ {
-		val, _ := g.GetValue()
+		val, valToString, _ := g.GetValue()
 		g.Column.GeneratedData = append(g.Column.GeneratedData, val)
+		g.Column.ToStringGeneratedData = append(g.Column.ToStringGeneratedData, valToString)
 	}
 }
 func (g *ColumnGenerator) FillRandomValues(count int) {
 	for i := 0; i < count; i++ {
-		val, _ := g.GetValue()
+		val, valToString, _ := g.GetValue()
 		g.Column.GeneratedData = append(g.Column.GeneratedData, val)
+		g.Column.ToStringGeneratedData = append(g.Column.ToStringGeneratedData, valToString)
 	}
 }
 
+type GenSet struct {
+	Data         any
+	ToStringData string
+}
+
 func (g *ColumnGenerator) FillDependencyValues(count int) bool {
-	if g.Column.Constraints != nil {
+	if len(g.Column.Constraints) > 0 {
 		if data, ok := g.Column.Constraints["FOREIGN KEY"]; ok {
 			key := data.GetDependencyKey()
 			constrainGen := Generators[key]
 			if len(constrainGen.Column.GeneratedData) == 0 {
 				constrainGen.FillData()
 			}
-			var shuffledData []any
+
+			var set []GenSet
 			for {
-				if count <= len(shuffledData) {
+				if count <= len(set) {
 					break
 				}
-				for _, d := range constrainGen.Column.GeneratedData {
+				for i := range constrainGen.Column.GeneratedData {
+					resultValue := constrainGen.Column.GeneratedData[i]
+					resultToValue := constrainGen.Column.ToStringGeneratedData[i]
 					if g.Column.Schema.IsNullable {
 						if gofakeit.IntRange(0, 1) == 0 {
-							d = nil
+							resultValue = nil
+							resultToValue = "null"
 						}
 					}
-					shuffledData = append(shuffledData, d)
+					set = append(set, GenSet{
+						Data:         resultValue,
+						ToStringData: resultToValue,
+					})
 				}
 			}
-			shuffledData = lo.Shuffle(shuffledData)
-			shuffledSet := shuffledData[:count]
-			g.Column.GeneratedData = append(g.Column.GeneratedData, shuffledSet...)
+			set = lo.Shuffle(set[:count])
+
+			for _, setData := range set {
+				g.Column.GeneratedData = append(g.Column.GeneratedData, setData.Data)
+				g.Column.ToStringGeneratedData = append(g.Column.ToStringGeneratedData, setData.ToStringData)
+			}
+
 			return true
 		}
 	}
 	return false
 }
-
+func GetColumnByDependencyKey(database, tableName, columnName string) string {
+	return fmt.Sprintf("%s.%s.%s", database, tableName, columnName)
+}
 func (d *Schema) GetKey() string {
 	return fmt.Sprintf("%s.%s.%s", d.Database, d.TableName, d.ColumnName)
 }
@@ -115,30 +134,31 @@ func (d *Constraint) GetDependencyKey() string {
 	return fmt.Sprintf("%s.%s.%s", d.DependencyDatabaseName, d.DependencyTableName, d.DependencyColumnName)
 }
 
-func (g *ColumnGenerator) GetValue() (any, error) {
+func (g *ColumnGenerator) GetValue() (any, string, error) {
 	var result any
+	var resultToString string
 	switch g.Column.Schema.DataType {
 	case "USER-DEFINED":
 		return g.GetCustomDatabaseType(g.Column.Schema)
 	case "date":
-		result = postgres_types_generators.DateGenerator()
+		result, resultToString = postgres_types_generators.DateGenerator()
 	case "timestamp with time zone":
-		result = postgres_types_generators.TimeStampGenerator()
+		result, resultToString = postgres_types_generators.TimeStampGenerator()
 	case "timestamp without time zone":
-		result = postgres_types_generators.TimeStampGenerator()
+		result, resultToString = postgres_types_generators.TimeStampGenerator()
 	case "boolean":
-		result = postgres_types_generators.BoolGenerator()
+		result, resultToString = postgres_types_generators.BoolGenerator()
 	case "numeric":
-		result = postgres_types_generators.NumericGenerator()
+		result, resultToString = postgres_types_generators.NumericGenerator()
 	case "uuid":
-		result = postgres_types_generators.UUIDGenerator()
+		result, resultToString = postgres_types_generators.UUIDGenerator()
 	case "bit":
-		result = postgres_types_generators.BitGenerator()
+		result, resultToString = postgres_types_generators.BitGenerator()
 	case "jsonb":
-		result = postgres_types_generators.JsonBGenerator()
+		result, resultToString = postgres_types_generators.JsonBGenerator()
 	case "integer":
 		if g.Column.Schema.ColumnDefault != nil && strings.Contains(*g.Column.Schema.ColumnDefault, "nextval") {
-			result = postgres_types_generators.Serial(fmt.Sprintf("%s_%s_%s",
+			result, resultToString = postgres_types_generators.Serial(fmt.Sprintf("%s_%s_%s",
 				g.Column.Schema.Database,
 				g.Column.Schema.TableName,
 				g.Column.Schema.ColumnName,
@@ -147,15 +167,15 @@ func (g *ColumnGenerator) GetValue() (any, error) {
 		}
 		result = gofakeit.IntRange(0, +2147483647)
 	case "text":
-		result = postgres_types_generators.RandStringRunes(g.Settings.DefaultTypeSettings.VarCharLength)
+		result, resultToString = postgres_types_generators.RandStringRunes(g.Settings.DefaultTypeSettings.VarCharLength)
 	case "smallint":
-		result = postgres_types_generators.SmallIntGenerator()
+		result, resultToString = postgres_types_generators.SmallIntGenerator()
 	case "bigint":
-		result = postgres_types_generators.BigIntGenerator()
+		result, resultToString = postgres_types_generators.BigIntGenerator()
 	case "character varying":
-		result = postgres_types_generators.RandStringRunes(g.Settings.DefaultTypeSettings.VarCharLength)
+		result, resultToString = postgres_types_generators.RandStringRunes(g.Settings.DefaultTypeSettings.VarCharLength)
 	default:
-		return nil, errors.New(fmt.Sprintf("unknown type %s in table %s in database %s",
+		return nil, "", errors.New(fmt.Sprintf("unknown type %s in table %s in database %s",
 			g.Column.Schema.DataType,
 			g.Column.Schema.TableName,
 			g.Column.Schema.Database,
@@ -164,16 +184,17 @@ func (g *ColumnGenerator) GetValue() (any, error) {
 	//TODO Добавить шанс срабатывания
 	if g.Column.Schema.IsNullable {
 		if gofakeit.IntRange(0, 1) == 0 {
-			return nil, nil
+			return nil, "null", nil
 		}
 	}
-	return result, nil
+	return result, resultToString, nil
 }
 
-func (g *ColumnGenerator) GetCustomDatabaseType(columnData *Schema) (any, error) {
+func (g *ColumnGenerator) GetCustomDatabaseType(columnData *Schema) (any, string, error) {
 	enumKey := strings.Split(*columnData.ColumnDefault, "::")
 	if len(enumKey) < 2 {
-		return nil, errors.New(fmt.Sprintf("unknown type %s in table %s in database %s", columnData.DataType, columnData.TableName, columnData.Database))
+		return nil, "", errors.New(fmt.Sprintf("unknown type %s in table %s in database %s",
+			columnData.DataType, columnData.TableName, columnData.Database))
 	}
 	if g.Enum == nil {
 		var enum []string
@@ -182,9 +203,11 @@ func (g *ColumnGenerator) GetCustomDatabaseType(columnData *Schema) (any, error)
 			panic(err)
 		}
 		if len(enum) == 0 {
-			return nil, errors.New(fmt.Sprintf("unknown type %s in table %s in database %s", columnData.DataType, columnData.TableName, columnData.Database))
+			return nil, "", errors.New(fmt.Sprintf("unknown type %s in table %s in database %s",
+				columnData.DataType, columnData.TableName, columnData.Database))
 		}
 		g.Enum = enum
 	}
-	return postgres_types_generators.ByDictionaryStringRandom(g.Enum), nil
+	result, stringResult := postgres_types_generators.ByDictionaryStringRandom(g.Enum)
+	return result, stringResult, nil
 }

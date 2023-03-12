@@ -1,12 +1,16 @@
 package postgres_types_generators
 
-import "math/rand"
+import (
+	"math/rand"
+	"strconv"
+)
 
-var boolState = []any{
+var boolState = []bool{
 	true,
 	false,
 }
 
-func BoolGenerator() any {
-	return boolState[rand.Intn(len(boolState))]
+func BoolGenerator() (any, string) {
+	data := boolState[rand.Intn(len(boolState))]
+	return data, strconv.FormatBool(data)
 }

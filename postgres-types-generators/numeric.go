@@ -1,13 +1,15 @@
 package postgres_types_generators
 
 import (
+	"fmt"
 	"github.com/brianvoe/gofakeit/v6"
 	"math"
 )
 
-func NumericGenerator() any {
+func NumericGenerator() (any, string) {
 	//TODO precision and range
-	return toFixed(gofakeit.Float64Range(0, 1000), 2)
+	data := toFixed(gofakeit.Float64Range(0, 1000), 2)
+	return data, fmt.Sprintf("%f", data)
 }
 
 func round(num float64) int {
@@ -16,5 +18,6 @@ func round(num float64) int {
 
 func toFixed(num float64, precision int) float64 {
 	output := math.Pow(10, float64(precision))
-	return float64(round(num*output)) / output
+	data := float64(round(num*output)) / output
+	return data
 }

@@ -79,12 +79,15 @@ func InsertSingleTable(k string, gen []*generator.ColumnGenerator) {
 	dataSet := generator.DataSet{
 		Columns: make([]string, len(gen)),
 		Data:    make([][]any, len(gen[0].Column.GeneratedData))}
+	dataSetString := generator.DataSet{
+		Columns: make([]string, len(gen)),
+		Data:    make([][]any, len(gen[0].Column.GeneratedData))}
+
 	for j, tableColumns := range gen {
 		for kConstraint, constraint := range tableColumns.Column.Constraints {
 			if kConstraint == "FOREIGN KEY" && constraint.DependencyTableName != tableColumns.Column.Schema.TableName {
 				key := fmt.Sprintf("%s%s%s", constraint.DependencyDatabaseName, Settings.Separator, constraint.DependencyTableName)
 				if _, ok := Inserted[key]; !ok {
-					fmt.Println(fmt.Sprintf("%s redirect -> %s", k, key))
 					InsertSingleTable(
 						key,
 						GroupedTables[key],
@@ -96,19 +99,26 @@ func InsertSingleTable(k string, gen []*generator.ColumnGenerator) {
 		for i, columnValue := range tableColumns.Column.GeneratedData {
 			if len(dataSet.Data[i]) == 0 {
 				dataSet.Data[i] = make([]any, len(gen))
+				dataSetString.Data[i] = make([]any, len(gen))
 			}
 			dataSet.Data[i][j] = columnValue
+			dataSetString.Data[i][j] = tableColumns.Column.ToStringGeneratedData[i]
 		}
 
 	}
-
+	fmt.Println("Dataset ------------------------", gen[0].Column.Schema.Database, gen[0].Column.Schema.TableName)
+	fmt.Println(dataSet.Columns)
+	for _, dataSetValue := range dataSetString.Data {
+		fmt.Println(dataSetValue)
+	}
+	fmt.Println("------------------------ \n")
 	bulkData := pgx.CopyFromRows(dataSet.Data)
 	_, err := gen[0].Db.PgxConn.CopyFrom([]string{gen[0].Column.Schema.TableName}, dataSet.Columns, bulkData)
 	if err != nil {
 		detailedError := err.(pgx.PgError)
-		panic(detailedError.Detail)
+		panic(fmt.Sprintf("%s \n %v", detailedError.Detail, detailedError.Error()))
 	}
-	fmt.Println(fmt.Sprintf("Inserted in database %s table %s", gen[0].Column.Schema.Database, gen[0].Column.Schema.TableName))
+	fmt.Println(fmt.Sprintf("Inserted in database %s table %s \n", gen[0].Column.Schema.Database, gen[0].Column.Schema.TableName))
 	Inserted[k] = struct{}{}
 }
 
@@ -182,7 +192,9 @@ func PrepareDataSets() {
 func FillDataSet(relations map[string]*generator.Table) {
 	for _, relation := range relations {
 		for _, column := range relation.Columns {
-			generator.GetGenerator(column).FillData()
+			currentGen := generator.GetGenerator(column)
+			generator.SetGenerator(currentGen.Settings, column, currentGen.Db, currentGen.TableSettings, currentGen.Table).
+				FillData()
 		}
 	}
 }
@@ -194,7 +206,7 @@ func ValidateSupportedTypes(Schemas []*generator.Schema, db *postgres.Connection
 			continue
 		}
 		g := generator.SetGenerator(Settings, &generator.Column{Schema: v}, db, nil, nil)
-		_, err := g.GetValue()
+		_, _, err := g.GetValue()
 		if err != nil {
 			resultError = append(resultError, err)
 		}

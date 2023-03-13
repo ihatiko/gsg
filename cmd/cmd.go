@@ -68,6 +68,18 @@ func InsertData() {
 		}
 	}
 	for k, gen := range GroupedTables {
+		for _, g := range gen {
+			if d, ok := g.Column.Constraints["FOREIGN KEY"]; ok {
+				sd := generator.GeneratedSets[d.GetDependencyKey()].ToStringGeneratedData[0]
+				g2 := generator.GeneratedSets[g.Column.Schema.GetKey()].ToStringGeneratedData[0]
+				if sd != g2 && g2 != "null" {
+					for k, std := range generator.GeneratedSets {
+						fmt.Println(k, std.ToStringGeneratedData)
+					}
+					panic("TEST")
+				}
+			}
+		}
 		InsertSingleTable(k, gen)
 	}
 }

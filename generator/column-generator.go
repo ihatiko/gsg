@@ -128,6 +128,7 @@ func (g *ColumnGenerator) FillDependencyValues(count int) bool {
 				currentGeneratedSet.GeneratedData = append(generatedSet.GeneratedData, setData.Data)
 				currentGeneratedSet.ToStringGeneratedData = append(generatedSet.ToStringGeneratedData, setData.ToStringData)
 			}
+
 			GeneratedSets[g.Column.Schema.GetKey()] = currentGeneratedSet
 			return true
 		}

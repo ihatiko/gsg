@@ -123,13 +123,13 @@ func (g *ColumnGenerator) FillDependencyValues(count int) bool {
 				}
 			}
 			set = lo.Shuffle(set[:count])
-			currentGeneratedSet := &GeneratedData{}
+			currentGeneratedSet := GeneratedData{}
 			for _, setData := range set {
-				currentGeneratedSet.GeneratedData = append(generatedSet.GeneratedData, setData.Data)
-				currentGeneratedSet.ToStringGeneratedData = append(generatedSet.ToStringGeneratedData, setData.ToStringData)
+				currentGeneratedSet.GeneratedData = append(currentGeneratedSet.GeneratedData, setData.Data)
+				currentGeneratedSet.ToStringGeneratedData = append(currentGeneratedSet.ToStringGeneratedData, setData.ToStringData)
 			}
 
-			GeneratedSets[g.Column.Schema.GetKey()] = currentGeneratedSet
+			GeneratedSets[g.Column.Schema.GetKey()] = &currentGeneratedSet
 			return true
 		}
 	}

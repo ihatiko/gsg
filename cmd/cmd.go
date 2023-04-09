@@ -68,18 +68,6 @@ func InsertData() {
 		}
 	}
 	for k, gen := range GroupedTables {
-		for _, g := range gen {
-			if d, ok := g.Column.Constraints["FOREIGN KEY"]; ok {
-				sd := generator.GeneratedSets[d.GetDependencyKey()].ToStringGeneratedData[0]
-				g2 := generator.GeneratedSets[g.Column.Schema.GetKey()].ToStringGeneratedData[0]
-				if sd != g2 && g2 != "null" {
-					for k, std := range generator.GeneratedSets {
-						fmt.Println(k, std.ToStringGeneratedData)
-					}
-					panic("TEST")
-				}
-			}
-		}
 		InsertSingleTable(k, gen)
 	}
 }
@@ -125,7 +113,7 @@ func InsertSingleTable(k string, gen []*generator.ColumnGenerator) {
 	for _, dataSetValue := range dataSetString.Data {
 		fmt.Println(dataSetValue)
 	}
-	fmt.Println("------------------------ \n")
+	fmt.Println("------------------------", "\n")
 	bulkData := pgx.CopyFromRows(dataSet.Data)
 	_, err := gen[0].Db.PgxConn.CopyFrom([]string{gen[0].Column.Schema.TableName}, dataSet.Columns, bulkData)
 	if err != nil {
@@ -179,8 +167,10 @@ func ValidateSupportedDatabaseTypes(connections []cfg.DatabaseConnection) error 
 }
 
 func PrepareDataSets() {
+	var relationsMap []map[string]*generator.Table
 	for _, columns := range ColumnBuffer {
 		relations := ToRelations(columns.Schemas)
+		relationsMap = append(relationsMap, relations)
 		for _, v := range relations {
 			for _, column := range v.Columns {
 				//TODO превратить заранее в мапу для оптимизации
@@ -197,9 +187,10 @@ func PrepareDataSets() {
 				})
 				generator.SetGenerator(Settings, column, columns.Db, table, v)
 			}
-
-			FillDataSet(relations)
 		}
+	}
+	for _, relations := range relationsMap {
+		FillDataSet(relations)
 	}
 }
 

@@ -16,7 +16,7 @@ settings:
     "testDatabase//test_database//user_migrations",
     "testDatabase//test_database//migration",
   ]
-  defaultSet: 1
+  defaultSet: 100
   defaultTypeSettings:
     varcharLength: 10
     numericRange:

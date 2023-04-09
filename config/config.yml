@@ -35,27 +35,3 @@ settings:
                 unique: true
                 dictionary: names
                 #annotation: connectionName_database_schema_table_column
-
-
-
-
-
-
-          #typeSettings: ["character varying length = 10"]
-
-# billing
-#  databases:
-#      - name: test_database
-#        tables:
-#          - name: test
-#            rules: [ "$unique", "$full-unique", "$positive" ]
-#            column:
-#              - name:
-#                rules: [
-#                  "$value < 10",
-#                  "$annotation=tableName.columnName",
-#                  "$dictionary=ИмяСправочника"
-#             ]
-
-
-# Вынести сюда все правила факера
